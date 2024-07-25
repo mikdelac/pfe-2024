@@ -81,7 +81,17 @@ class MainWindow(QMainWindow):
         # Group Box for Tare Controls
         tareGroupBox = QGroupBox("Tare")
         tareLayout = QVBoxLayout()
+
+        buttonTare = QPushButton("Tare")
+        buttonTare.pressed.connect(self.sendTare)
         
+        tareLayout.addWidget(buttonTare)
+        tareGroupBox.setLayout(tareLayout)
+
+        # Group Box for Calibrate Controls
+        calGroupBox = QGroupBox("Calibrate")
+        calLayout = QVBoxLayout()
+
         sliderLayout = QHBoxLayout()
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, 300)
@@ -99,17 +109,18 @@ class MainWindow(QMainWindow):
         sliderLayout.addWidget(self.sliderLabel)
         sliderLayout.addWidget(self.unitToggle)
 
-        buttonSendBLE = QPushButton("Send Tare")
-        buttonSendBLE.pressed.connect(self.sendBLE)
-        
-        tareLayout.addLayout(sliderLayout)
-        tareLayout.addWidget(buttonSendBLE)
-        tareGroupBox.setLayout(tareLayout)
+        buttonCalibrateBLE = QPushButton("Calibrate")
+        buttonCalibrateBLE.pressed.connect(self.sendCalibrateBLE)
+
+        calLayout.addLayout(sliderLayout)
+        calLayout.addWidget(buttonCalibrateBLE)
+        calGroupBox.setLayout(calLayout)
 
         layout.addWidget(buttonStartBLE)
         layout.addWidget(self.console)
         layout.addWidget(self.outconsole)
         layout.addWidget(tareGroupBox)
+        layout.addWidget(calGroupBox)
         
         w = QWidget()
         w.setLayout(layout)
@@ -129,11 +140,15 @@ class MainWindow(QMainWindow):
         self.workerBLE.signals.signalRes.connect(self.slotRes)
         self.threadpool.start(self.workerBLE)
         
-    def sendBLE(self):
+    def sendTare(self):
         tareCommand = "Tare"
+        self.workerBLE.toSendBLE(tareCommand)
+
+    def sendCalibrateBLE(self):
+        calibrateCommand = "Calibrate"
         sliderValue = self.slider.value()
         unit = self.unitToggle.currentText()
-        fullCommand = f"{tareCommand} {sliderValue} {unit}"
+        fullCommand = f"{calibrateCommand} {sliderValue} {unit}"
         self.workerBLE.toSendBLE(fullCommand)
         
     def slotMsg(self, msg):
