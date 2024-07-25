@@ -4,6 +4,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <esp_system.h>
+#include <string>
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
@@ -18,7 +19,14 @@ const uint8_t CLOCK_PIN1 = 25; // Can use any pins!
 const uint8_t DATA_PIN2 = 26;  // Can use any pins!
 const uint8_t CLOCK_PIN2 = 27; // Can use any pins!
 
+// Taring operation variables
 uint8_t needTaring = 1;
+uint8_t taredValue;
+bool    taredUnit = false; // Default to kg (false: kg, true: lbs)
+
+
+// Scaling operation variables
+uint8_t scaleFactor = 1;
 
 BLEServer *pServer = NULL;
 BLECharacteristic *pTxCharacteristic;
@@ -72,21 +80,29 @@ public:
             Serial.println();
             Serial.println("*********");
 
-            if (rxValue == "Tare") {
+            // Split the incoming string to extract the first word
+            size_t firstSpaceIndex = rxValue.find(' ');
+            std::string rxValue_command = rxValue.substr(0, firstSpaceIndex);
+
+            if (rxValue_command == "Tare") {
                 Serial.println("Executing Tare command...");
                 
-                // Perform tare operation
+                // Assign tare operation variables
                 needTaring = 1;
-                // Measure the weight after tare
-                // TODO
-                // Send the measured weights back via BLE
-                /*
-                char weightStr[100];
-                //snprintf(weightStr, sizeof(weightStr), "Weight 1: %.2f, Weight 2: %.2f", weight1, weight2);
-                if (deviceConnected) {
-                    //pTxCharacteristic->setValue(weightStr);
-                    //pTxCharacteristic->notify();
-                }*/
+                size_t secondSpaceIndex = rxValue.find(' ', firstSpaceIndex + 1);
+                size_t thirdSpaceIndex = rxValue.find(' ', secondSpaceIndex + 1);
+                std::string tempTaredValue = rxValue.substr(firstSpaceIndex + 1, secondSpaceIndex - firstSpaceIndex - 1);
+                // taredValue
+                taredValue = std::stoi(tempTaredValue);
+                // taredUnit
+                std::string tempTaredUnit = rxValue.substr(secondSpaceIndex + 1, thirdSpaceIndex - secondSpaceIndex - 1);
+                if (tempTaredUnit == "lbs") {
+                  taredUnit = true;
+                } else {
+                  taredUnit = false;
+                }
+
+
             } else {
                 Serial.print("Unknown command received: ");
                 Serial.println(rxValue.c_str());
