@@ -18,6 +18,8 @@ const uint8_t CLOCK_PIN1 = 25; // Can use any pins!
 const uint8_t DATA_PIN2 = 26;  // Can use any pins!
 const uint8_t CLOCK_PIN2 = 27; // Can use any pins!
 
+uint8_t needTaring = 1;
+
 BLEServer *pServer = NULL;
 BLECharacteristic *pTxCharacteristic;
 bool deviceConnected = false;
@@ -25,6 +27,21 @@ bool oldDeviceConnected = false;
 
 Adafruit_HX711 hx711_1(DATA_PIN1, CLOCK_PIN1);
 Adafruit_HX711 hx711_2(DATA_PIN2, CLOCK_PIN2);
+
+void tareSensors() {
+  Serial.println("Tareing....");
+  for (uint8_t t = 0; t < 3; t++) {
+    hx711_1.tareA(hx711_1.readChannelRaw(CHAN_A_GAIN_128));
+    hx711_1.tareA(hx711_1.readChannelRaw(CHAN_A_GAIN_128));
+    hx711_1.tareB(hx711_1.readChannelRaw(CHAN_B_GAIN_32));
+    hx711_1.tareB(hx711_1.readChannelRaw(CHAN_B_GAIN_32));
+    hx711_2.tareA(hx711_2.readChannelRaw(CHAN_A_GAIN_128));
+    hx711_2.tareA(hx711_2.readChannelRaw(CHAN_A_GAIN_128));
+    hx711_2.tareB(hx711_2.readChannelRaw(CHAN_B_GAIN_32));
+    hx711_2.tareB(hx711_2.readChannelRaw(CHAN_B_GAIN_32));
+  }
+}
+
 
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -37,12 +54,13 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 class MyCallbacks : public BLECharacteristicCallbacks {
+public:
     void onWrite(BLECharacteristic *pCharacteristic) {
-        // Convertir l'objet String retourné par pCharacteristic->getValue() en const char*
+        // Convert the String object returned by pCharacteristic->getValue() into a const char*
         String value = pCharacteristic->getValue();
         const char* valueCStr = value.c_str();
         
-        // Utiliser const char* pour initialiser std::string
+        // Use const char* to initialize std::string
         std::string rxValue(valueCStr);
 
         if (rxValue.length() > 0) {
@@ -53,6 +71,26 @@ class MyCallbacks : public BLECharacteristicCallbacks {
 
             Serial.println();
             Serial.println("*********");
+
+            if (rxValue == "Tare") {
+                Serial.println("Executing Tare command...");
+                
+                // Perform tare operation
+                needTaring = 1;
+                // Measure the weight after tare
+                // TODO
+                // Send the measured weights back via BLE
+                /*
+                char weightStr[100];
+                //snprintf(weightStr, sizeof(weightStr), "Weight 1: %.2f, Weight 2: %.2f", weight1, weight2);
+                if (deviceConnected) {
+                    //pTxCharacteristic->setValue(weightStr);
+                    //pTxCharacteristic->notify();
+                }*/
+            } else {
+                Serial.print("Unknown command received: ");
+                Serial.println(rxValue.c_str());
+            }
         }
     }
 };
@@ -66,7 +104,7 @@ void setup() {
   pinMode(34, INPUT);
   pinMode(35, INPUT);
 
-   // Create the BLE Device
+  // Create the BLE Device
   BLEDevice::init("esp32");  // Set the device name to "esp32"
 
   // Create the BLE Server
@@ -117,21 +155,15 @@ void setup() {
   Serial.println(CLOCK_PIN2);
   hx711_2.begin();
 
-  // read and toss 3 values each
-  Serial.println("Tareing....");
-  for (uint8_t t=0; t<3; t++) {
-    hx711_1.tareA(hx711_1.readChannelRaw(CHAN_A_GAIN_128));
-    hx711_1.tareA(hx711_1.readChannelRaw(CHAN_A_GAIN_128));
-    hx711_1.tareB(hx711_1.readChannelRaw(CHAN_B_GAIN_32));
-    hx711_1.tareB(hx711_1.readChannelRaw(CHAN_B_GAIN_32));
-    hx711_2.tareA(hx711_2.readChannelRaw(CHAN_A_GAIN_128));
-    hx711_2.tareA(hx711_2.readChannelRaw(CHAN_A_GAIN_128));
-    hx711_2.tareB(hx711_2.readChannelRaw(CHAN_B_GAIN_32));
-    hx711_2.tareB(hx711_2.readChannelRaw(CHAN_B_GAIN_32));
-  }
 }
 
 void loop() {
+
+  if (needTaring == 1) {
+    // tare
+    tareSensors();
+    needTaring = 0;
+  }
   // Read weight values
   int32_t weightA128_1 = hx711_1.readChannelBlocking(CHAN_A_GAIN_128);
   int32_t weightB32_1 = hx711_1.readChannelBlocking(CHAN_B_GAIN_32);
@@ -146,10 +178,23 @@ void loop() {
   int analogValP34 = analogRead(34);
   int analogValP38 = analogRead(38);
 
+  // Get the current time in milliseconds
+  unsigned long currentMillis = millis();
+  unsigned long currentSeconds = currentMillis / 1000;
+  unsigned long currentMilliseconds = currentMillis % 1000;
+
+  // Format the time as HH:MM:SS.mmm
+  char timeStr[20];
+  snprintf(timeStr, sizeof(timeStr), "%02lu:%02lu:%02lu.%03lu", 
+           (currentSeconds / 3600) % 24, 
+           (currentSeconds / 60) % 60, 
+           currentSeconds % 60, 
+           currentMilliseconds);
+
   // Format the data into a string
-  char dataStr[200];
-  snprintf(dataStr, sizeof(dataStr), "A1:%ld,B1:%ld,A2:%ld,B2:%ld,AnP35:%d,AnP39:%d,AnP37:%d,AnP36:%d,AnP34:%d,AnP38:%d",
-           weightA128_1, weightB32_1, weightA128_2, weightB32_2, analogValP35, analogValP39, analogValP37, analogValP36, analogValP34, analogValP38);
+  char dataStr[300];
+  snprintf(dataStr, sizeof(dataStr), "%s, A1:%ld,B1:%ld,A2:%ld,B2:%ld,AnP35:%d,AnP39:%d,AnP37:%d,AnP36:%d,AnP34:%d,AnP38:%d",
+           timeStr, weightA128_1, weightB32_1, weightA128_2, weightB32_2, analogValP35, analogValP39, analogValP37, analogValP36, analogValP34, analogValP38);
 
   Serial.println(dataStr);
 
@@ -157,9 +202,9 @@ void loop() {
     // Send the data via Bluetooth
     pTxCharacteristic->setValue(dataStr);
     pTxCharacteristic->notify();
-    delay(100); // Delay to avoid congestion
+    //delay(50); // Delay to avoid congestion
   }
- 
+
   // disconnecting
   if (!deviceConnected && oldDeviceConnected) {
     delay(500); // give the bluetooth stack the chance to get things ready
