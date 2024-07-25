@@ -26,7 +26,9 @@ bool    taredUnit = false; // Default to kg (false: kg, true: lbs)
 
 
 // Scaling operation variables
+uint8_t needScaling = 0;
 uint8_t scaleFactor = 1;
+int32_t weight = 0;
 
 BLEServer *pServer = NULL;
 BLECharacteristic *pTxCharacteristic;
@@ -84,14 +86,15 @@ public:
             size_t firstSpaceIndex = rxValue.find(' ');
             std::string rxValue_command = rxValue.substr(0, firstSpaceIndex);
 
-            if (rxValue_command == "Tare") {
-                Serial.println("Executing Tare command...");
+            if (rxValue_command == "Calibrate") {
+                Serial.println("Executing Calibrate command...");
                 
-                // Assign tare operation variables
-                needTaring = 1;
+                // Assign scale operation variables
+                needScaling = 1;
                 size_t secondSpaceIndex = rxValue.find(' ', firstSpaceIndex + 1);
                 size_t thirdSpaceIndex = rxValue.find(' ', secondSpaceIndex + 1);
                 std::string tempTaredValue = rxValue.substr(firstSpaceIndex + 1, secondSpaceIndex - firstSpaceIndex - 1);
+                Serial.println(tempTaredValue.c_str());
                 // taredValue
                 taredValue = std::stoi(tempTaredValue);
                 // taredUnit
@@ -102,6 +105,10 @@ public:
                   taredUnit = false;
                 }
 
+
+            } else if (rxValue_command == "Tare") {
+                // Assign tare operation variables
+                needTaring = 1;
 
             } else {
                 Serial.print("Unknown command received: ");
@@ -181,10 +188,31 @@ void loop() {
     needTaring = 0;
   }
   // Read weight values
+  // !! Ralentit énormément la loop principale du ESP32 !!
   int32_t weightA128_1 = hx711_1.readChannelBlocking(CHAN_A_GAIN_128);
   int32_t weightB32_1 = hx711_1.readChannelBlocking(CHAN_B_GAIN_32);
   int32_t weightA128_2 = hx711_2.readChannelBlocking(CHAN_A_GAIN_128);
   int32_t weightB32_2 = hx711_2.readChannelBlocking(CHAN_B_GAIN_32);
+
+  // Set scaleFactor
+  if (needScaling == 1) {
+    Serial.println("Calibrating....");
+    //scale
+      for (uint8_t t = 0; t < 10; t++) {
+          int32_t weightA128_1 = hx711_1.readChannelBlocking(CHAN_A_GAIN_128);
+          int32_t weightB32_1 = hx711_1.readChannelBlocking(CHAN_B_GAIN_32);
+          int32_t weightA128_2 = hx711_2.readChannelBlocking(CHAN_A_GAIN_128);
+          int32_t weightB32_2 = hx711_2.readChannelBlocking(CHAN_B_GAIN_32);
+          if (t == 0) {
+            scaleFactor = ( abs(weightA128_1) + abs(weightB32_1) + abs(weightA128_2) + abs(weightB32_2) ) / taredValue;
+          } else {
+            scaleFactor = ( scaleFactor + ( abs(weightA128_1) + abs(weightB32_1) + abs(weightA128_2) + abs(weightB32_2) ) / taredValue) / 2;
+          }
+      }
+    Serial.println(scaleFactor);
+    needScaling = 0;
+  }
+  weight = ( abs(weightA128_1) + abs(weightB32_1) + abs(weightA128_2) + abs(weightB32_2) ) / scaleFactor;
 
   // Read analog values
   int analogValP35 = analogRead(35);
@@ -209,8 +237,8 @@ void loop() {
 
   // Format the data into a string
   char dataStr[300];
-  snprintf(dataStr, sizeof(dataStr), "%s, A1:%ld,B1:%ld,A2:%ld,B2:%ld,AnP35:%d,AnP39:%d,AnP37:%d,AnP36:%d,AnP34:%d,AnP38:%d",
-           timeStr, weightA128_1, weightB32_1, weightA128_2, weightB32_2, analogValP35, analogValP39, analogValP37, analogValP36, analogValP34, analogValP38);
+  snprintf(dataStr, sizeof(dataStr), "%s, Weight:%ld,A1:%ld,B1:%ld,A2:%ld,B2:%ld,AnP35:%d,AnP39:%d,AnP37:%d,AnP36:%d,AnP34:%d,AnP38:%d",
+           timeStr, weight, weightA128_1, weightB32_1, weightA128_2, weightB32_2, analogValP35, analogValP39, analogValP37, analogValP36, analogValP34, analogValP38);
 
   Serial.println(dataStr);
 
