@@ -4,8 +4,8 @@ import time
 import requests
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
-    QApplication, QLabel, QMainWindow,  QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
-    )
+    QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
+)
 
 from bluepy import btle
 
@@ -20,7 +20,6 @@ class MyDelegate(btle.DefaultDelegate):
         self.sgn = sgn
 
     def handleNotification(self, cHandle, data):
-        
         try:
             dataDecoded = data.decode()
             self.sgn.signalRes.emit(dataDecoded)
@@ -33,6 +32,7 @@ class WorkerBLE(QRunnable):
         super().__init__()
         self.signals = WorkerSignals()
         self.rqsToSend = False
+        self.bytestosend = b''
         
     @pyqtSlot()
     def run(self):
@@ -40,48 +40,31 @@ class WorkerBLE(QRunnable):
         
         #---------------------------------------------
         p = btle.Peripheral("08:F9:E0:20:3E:0A")
-        p.setDelegate( MyDelegate(self.signals) )
+        p.setDelegate(MyDelegate(self.signals))
 
         svc = p.getServiceByUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
         self.ch_Tx = svc.getCharacteristics("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")[0]
         ch_Rx = svc.getCharacteristics("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")[0]
 
         setup_data = b"\x01\00"
-        p.writeCharacteristic(ch_Rx.valHandle+1, setup_data)
+        p.writeCharacteristic(ch_Rx.valHandle + 1, setup_data)
 
         # BLE loop --------
-
         while True:
-            """
-            if p.waitForNotifications(1.0):
-                # handleNotification() was called
-                continue
-
-            print("Waiting...")
-            """
-            
             p.waitForNotifications(1.0)
             
             if self.rqsToSend:
                 self.rqsToSend = False
-
                 try:
                     self.ch_Tx.write(self.bytestosend, True)
                 except btle.BTLEException:
-                    print("btle.BTLEException");
+                    print("btle.BTLEException")
             
-        #---------------------------------------------hellohello
         self.signals.signalMsg.emit("WorkerBLE end")
         
     def toSendBLE(self, tosend):
         self.bytestosend = bytes(tosend, 'utf-8')
         self.rqsToSend = True
-        """
-        try:
-            self.ch_Tx.write(bytestosend, True)
-        except BTLEException:
-            print("BTLEException");
-        """
             
 class MainWindow(QMainWindow):
     
@@ -98,7 +81,7 @@ class MainWindow(QMainWindow):
         
         self.outconsole = QPlainTextEdit()
         
-        buttonSendBLE = QPushButton("Send message")
+        buttonSendBLE = QPushButton("Send Tare")
         buttonSendBLE.pressed.connect(self.sendBLE)
 
         layout.addWidget(buttonStartBLE)
@@ -113,8 +96,7 @@ class MainWindow(QMainWindow):
         
         self.show()
         self.threadpool = QThreadPool()
-        print(
-            "Multithreading with Maximum %d threads" % self.threadpool.maxThreadCount())
+        print("Multithreading with Maximum %d threads" % self.threadpool.maxThreadCount())
             
     def startBLE(self):
         self.workerBLE = WorkerBLE()
@@ -123,8 +105,8 @@ class MainWindow(QMainWindow):
         self.threadpool.start(self.workerBLE)
         
     def sendBLE(self):
-        strToSend = self.outconsole.toPlainText()
-        self.workerBLE.toSendBLE(strToSend)
+        tareCommand = "Tare"
+        self.workerBLE.toSendBLE(tareCommand)
         
     def slotMsg(self, msg):
         print(msg)
