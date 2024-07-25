@@ -1,7 +1,8 @@
 import sys
 import time
-
 import requests
+import re  # Import re for regex to parse the Bluetooth message
+
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox,
@@ -22,6 +23,7 @@ class MyDelegate(btle.DefaultDelegate):
         try:
             dataDecoded = data.decode()
             self.sgn.signalRes.emit(dataDecoded)
+            print("Data: ", dataDecoded)
         except UnicodeError:
             print("UnicodeError: ", data)
 
@@ -68,7 +70,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        layout = QVBoxLayout()
+        mainLayout = QVBoxLayout()
         
         buttonStartBLE = QPushButton("Start BLE")
         buttonStartBLE.pressed.connect(self.startBLE)
@@ -116,16 +118,29 @@ class MainWindow(QMainWindow):
         calLayout.addWidget(buttonCalibrateBLE)
         calGroupBox.setLayout(calLayout)
 
-        layout.addWidget(buttonStartBLE)
-        layout.addWidget(self.console)
-        layout.addWidget(self.outconsole)
-        layout.addWidget(tareGroupBox)
-        layout.addWidget(calGroupBox)
+        # Group Box for Weight Display
+        weightGroupBox = QGroupBox("Weight")
+        self.weightLabel = QLabel("Weight: N/A")
+        weightLayout = QVBoxLayout()
+        weightLayout.addWidget(self.weightLabel)
+        weightGroupBox.setLayout(weightLayout)
+
+        # Adding widgets to the main layout
+        mainLayout.addWidget(buttonStartBLE)
+        mainLayout.addWidget(self.console)
+        mainLayout.addWidget(self.outconsole)
+        mainLayout.addWidget(tareGroupBox)
+        mainLayout.addWidget(calGroupBox)
+
+        # Create a top-level horizontal layout
+        topHorizontalLayout = QHBoxLayout()
+        topHorizontalLayout.addLayout(mainLayout)
+        topHorizontalLayout.addWidget(weightGroupBox, alignment=Qt.AlignRight | Qt.AlignTop)
+
+        widget = QWidget()
+        widget.setLayout(topHorizontalLayout)
         
-        w = QWidget()
-        w.setLayout(layout)
-        
-        self.setCentralWidget(w)
+        self.setCentralWidget(widget)
         
         self.show()
         self.threadpool = QThreadPool()
@@ -156,6 +171,15 @@ class MainWindow(QMainWindow):
         
     def slotRes(self, res):
         self.console.appendPlainText(res)
+        self.updateWeightDisplay(res)
+    
+    def updateWeightDisplay(self, message):
+        # Extract weight from the message
+        match = re.search(r'Weight:(\d+)', message)
+        #print(message)
+        if match:
+            weight = match.group(1)
+            self.weightLabel.setText(f"Weight: {weight}")
         
 app = QApplication(sys.argv)
 window = MainWindow()
