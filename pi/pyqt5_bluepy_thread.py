@@ -220,6 +220,8 @@ class MainWindow(QMainWindow):
         self.sliderLabel.setText(f"Value: {value}")
 
     def startBLE(self):
+        # Disable the button after it's clicked
+        self.buttonStartBLE.setEnabled(False)
         self.workerBLE = WorkerBLE()
         self.workerBLE.signals.signalMsg.connect(self.slotMsg)
         self.workerBLE.signals.signalRes.connect(self.slotRes)
@@ -280,7 +282,7 @@ class MainWindow(QMainWindow):
             self.buttonStartBLE.setEnabled(False)
         else:
             self.buttonStartBLE.setText("Start BLE")
-            self.buttonStartBLE.setEnabled(True)
+            self.buttonStartBLE.setEnabled(False)  # Keep the button disabled if not connected
 
 app = QApplication(sys.argv)
 window = MainWindow()
