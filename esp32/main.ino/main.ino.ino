@@ -235,27 +235,27 @@ void loop() {
            currentMilliseconds);
 
   // Format the fsr data into strings
-  char dataStr0[300];
+  char dataStr0[32];
   snprintf(dataStr0, sizeof(dataStr0), "%s,AnP35:%d",
            timeStr, analogValP35);
-  char dataStr1[300];
+  char dataStr1[32];
   snprintf(dataStr1, sizeof(dataStr1), "%s,AnP39:%d",
            timeStr, analogValP39);
-  char dataStr2[300];
+  char dataStr2[32];
   snprintf(dataStr2, sizeof(dataStr2), "%s,AnP37:%d",
            timeStr, analogValP37);
-  char dataStr3[300];
+  char dataStr3[32];
   snprintf(dataStr3, sizeof(dataStr3), "%s,AnP36:%d",
            timeStr, analogValP36);
-  char dataStr4[300];
+  char dataStr4[32];
   snprintf(dataStr4, sizeof(dataStr4), "%s,AnP34:%d",
            timeStr, analogValP34);
-  char dataStr5[300];
+  char dataStr5[32];
   snprintf(dataStr5, sizeof(dataStr5), "%s,AnP38:%d",
            timeStr, analogValP38);
         
   // Format the weight into strings
-  char weightStr[300];
+  char weightStr[32];
   snprintf(weightStr, sizeof(weightStr), "%s,W:%ld",
            timeStr, weight);
   Serial.println(weightStr);
