@@ -187,7 +187,7 @@ class MainWindow(QMainWindow):
     
     def updateWeightDisplay(self, message):
         # Extract weight from the message
-        match = re.search(r'Weight:(\d+)', message)
+        match = re.search(r'W:(\d+)', message)
         if match:
             weight = match.group(1)
             unit = self.unitToggle.currentText()  # Get current unit from the combo box
