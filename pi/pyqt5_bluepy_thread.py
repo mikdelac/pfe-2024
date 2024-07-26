@@ -78,8 +78,13 @@ class MainWindow(QMainWindow):
         self.console = QPlainTextEdit()
         self.console.setReadOnly(True)
         
-        self.outconsole = QPlainTextEdit()
-        
+        # Group Box for Weight Display
+        weightGroupBox = QGroupBox("Weight")
+        self.weightLabel = QLabel("Weight: N/A")
+        weightLayout = QVBoxLayout()
+        weightLayout.addWidget(self.weightLabel)
+        weightGroupBox.setLayout(weightLayout)
+
         # Group Box for Tare Controls
         tareGroupBox = QGroupBox("Tare")
         tareLayout = QVBoxLayout()
@@ -118,27 +123,15 @@ class MainWindow(QMainWindow):
         calLayout.addWidget(buttonCalibrateBLE)
         calGroupBox.setLayout(calLayout)
 
-        # Group Box for Weight Display
-        weightGroupBox = QGroupBox("Weight")
-        self.weightLabel = QLabel("Weight: N/A")
-        weightLayout = QVBoxLayout()
-        weightLayout.addWidget(self.weightLabel)
-        weightGroupBox.setLayout(weightLayout)
-
         # Adding widgets to the main layout
         mainLayout.addWidget(buttonStartBLE)
-        mainLayout.addWidget(self.console)
-        mainLayout.addWidget(self.outconsole)
+        mainLayout.addWidget(weightGroupBox)  # Add the weight group box here
+        mainLayout.addWidget(self.console)    # Add console below the weight group box
         mainLayout.addWidget(tareGroupBox)
         mainLayout.addWidget(calGroupBox)
 
-        # Create a top-level horizontal layout
-        topHorizontalLayout = QHBoxLayout()
-        topHorizontalLayout.addLayout(mainLayout)
-        topHorizontalLayout.addWidget(weightGroupBox, alignment=Qt.AlignRight | Qt.AlignTop)
-
         widget = QWidget()
-        widget.setLayout(topHorizontalLayout)
+        widget.setLayout(mainLayout)
         
         self.setCentralWidget(widget)
         
@@ -176,10 +169,10 @@ class MainWindow(QMainWindow):
     def updateWeightDisplay(self, message):
         # Extract weight from the message
         match = re.search(r'Weight:(\d+)', message)
-        #print(message)
         if match:
             weight = match.group(1)
-            self.weightLabel.setText(f"Weight: {weight}")
+            unit = self.unitToggle.currentText()  # Get current unit from the combo box
+            self.weightLabel.setText(f"Weight: {weight} {unit}")
         
 app = QApplication(sys.argv)
 window = MainWindow()
