@@ -1,14 +1,14 @@
 import sys
-import re  # Import re for regex to parse the Bluetooth message
+import re
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox,
+    QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView
 )
-
 from bluepy import btle
+import time
 
 class SensorData:
-    def __init__(self, timestamp, anp35=None, anp39=None, anp37=None, anp36=None, anp34=None, anp38=None):
+    def __init__(self, timestamp=None, anp35=None, anp39=None, anp37=None, anp36=None, anp34=None, anp38=None):
         self.timestamp = timestamp
         self.anp35 = anp35
         self.anp39 = anp39
@@ -17,21 +17,23 @@ class SensorData:
         self.anp34 = anp34
         self.anp38 = anp38
 
-    def __str__(self):
-        data_str = f"Timestamp: {self.timestamp}"
-        if self.anp35 is not None:
-            data_str += f", AnP35: {self.anp35}"
-        if self.anp39 is not None:
-            data_str += f", AnP39: {self.anp39}"
-        if self.anp37 is not None:
-            data_str += f", AnP37: {self.anp37}"
-        if self.anp36 is not None:
-            data_str += f", AnP36: {self.anp36}"
-        if self.anp34 is not None:
-            data_str += f", AnP34: {self.anp34}"
-        if self.anp38 is not None:
-            data_str += f", AnP38: {self.anp38}"
-        return data_str
+    def update(self, timestamp, sensor, value):
+        self.timestamp = timestamp  # Update timestamp with each message
+        if sensor == "AnP35":
+            self.anp35 = value
+        elif sensor == "AnP39":
+            self.anp39 = value
+        elif sensor == "AnP37":
+            self.anp37 = value
+        elif sensor == "AnP36":
+            self.anp36 = value
+        elif sensor == "AnP34":
+            self.anp34 = value
+        elif sensor == "AnP38":
+            self.anp38 = value
+
+    def is_complete(self):
+        return all(sensor is not None for sensor in [self.anp35, self.anp39, self.anp37, self.anp36, self.anp34, self.anp38])
 
 class WorkerSignals(QObject):
     signalMsg = pyqtSignal(str)
@@ -41,9 +43,10 @@ class WorkerSignals(QObject):
     signalDataParsed = pyqtSignal(SensorData)
 
 class MyDelegate(btle.DefaultDelegate):
-    def __init__(self, sgn):
+    def __init__(self, sgn, sensor_data):
         btle.DefaultDelegate.__init__(self)
         self.sgn = sgn
+        self.sensor_data = sensor_data
 
     def handleNotification(self, cHandle, data):
         try:
@@ -52,27 +55,19 @@ class MyDelegate(btle.DefaultDelegate):
             print("Data: ", dataDecoded)
 
             # Parse the data values
-            matches = re.findall(r'(\d+:\d+\.\d+),AnP(\d+):(\d+)', dataDecoded)
-            for match in matches:
-                timestamp = match[0]
-                sensor = f"AnP{match[1]}"
-                value = int(match[2])
+            match = re.search(r'(\d+:\d+\.\d+),AnP(\d+):(\d+)', dataDecoded)
+            if match:
+                timestamp = match.group(1)
+                sensor = f"AnP{match.group(2)}"
+                value = int(match.group(3))
 
-                if sensor == "AnP35":
-                    sensor_data = SensorData(timestamp, anp35=value)
-                elif sensor == "AnP39":
-                    sensor_data = SensorData(timestamp, anp39=value)
-                elif sensor == "AnP37":
-                    sensor_data = SensorData(timestamp, anp37=value)
-                elif sensor == "AnP36":
-                    sensor_data = SensorData(timestamp, anp36=value)
-                elif sensor == "AnP34":
-                    sensor_data = SensorData(timestamp, anp34=value)
-                elif sensor == "AnP38":
-                    sensor_data = SensorData(timestamp, anp38=value)
+                self.sensor_data.update(timestamp, sensor, value)
 
-                # Emit the parsed data
-                self.sgn.signalDataParsed.emit(sensor_data)
+                # Emit the sensor data only if all fields are populated
+                if self.sensor_data.is_complete():
+                    self.sgn.signalDataParsed.emit(self.sensor_data)
+                    # Reset the sensor data after emitting so it can be re-populated with new values
+                    self.sensor_data = SensorData()
 
         except UnicodeError:
             print("UnicodeError: ", data)
@@ -83,18 +78,19 @@ class WorkerBLE(QRunnable):
         self.signals = WorkerSignals()
         self.rqsToSend = False
         self.bytestosend = b''
-        
+        self.sensor_data = SensorData()  # Maintain the sensor data state
+
     @pyqtSlot()
     def run(self):
         self.signals.signalMsg.emit("WorkerBLE start")
-        
+
         while True:
             try:
                 self.signals.signalConnecting.emit(True)
                 # Attempt to connect to the Bluetooth device
                 p = btle.Peripheral("08:F9:E0:20:3E:0A")
                 self.signals.signalConnected.emit(True)  # Emit connection status
-                p.setDelegate(MyDelegate(self.signals))
+                p.setDelegate(MyDelegate(self.signals, self.sensor_data))
                 self.signals.signalConnecting.emit(False)
 
                 svc = p.getServiceByUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
@@ -107,7 +103,7 @@ class WorkerBLE(QRunnable):
                 # BLE loop --------
                 while True:
                     p.waitForNotifications(1.0)
-                    
+
                     if self.rqsToSend:
                         self.rqsToSend = False
                         try:
@@ -121,7 +117,7 @@ class WorkerBLE(QRunnable):
                 time.sleep(5)  # Wait before retrying
 
         self.signals.signalMsg.emit("WorkerBLE end")
-        
+
     def toSendBLE(self, tosend):
         self.bytestosend = bytes(tosend, 'utf-8')
         self.rqsToSend = True
@@ -129,20 +125,20 @@ class WorkerBLE(QRunnable):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        
+
         mainLayout = QVBoxLayout()
-        
+
         self.buttonStartBLE = QPushButton("Start BLE")
         self.buttonStartBLE.pressed.connect(self.startBLE)
-        
+
         self.console = QPlainTextEdit()
         self.console.setReadOnly(True)
-        
+
         # Connecting text label setup
         self.connectingLabel = QLabel("Trying to connect to Bluetooth...", self)
         self.connectingLabel.setAlignment(Qt.AlignCenter)
         self.connectingLabel.setVisible(False)
-        
+
         # Group Box for Weight Display
         weightGroupBox = QGroupBox("Weight")
         self.weightLabel = QLabel("Weight: N/A")
@@ -150,11 +146,18 @@ class MainWindow(QMainWindow):
         weightLayout.addWidget(self.weightLabel)
         weightGroupBox.setLayout(weightLayout)
 
-        # Group Box for Analog Values Display
+        # Group Box for Analog Values Table
         analogGroupBox = QGroupBox("Analog Values")
-        self.analogLabel = QLabel("No Data")
+
+        self.timestampLabel = QLabel("Timestamp: N/A")
+        self.analogTable = QTableWidget(3, 2)  # 3 rows, 2 columns
+        # Remove header labels
+        self.analogTable.horizontalHeader().setVisible(False)
+        self.analogTable.verticalHeader().setVisible(False)
+        self.analogTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         analogLayout = QVBoxLayout()
-        analogLayout.addWidget(self.analogLabel)
+        analogLayout.addWidget(self.timestampLabel)
+        analogLayout.addWidget(self.analogTable)
         analogGroupBox.setLayout(analogLayout)
 
         # Group Box for Tare Controls
@@ -163,7 +166,7 @@ class MainWindow(QMainWindow):
 
         buttonTare = QPushButton("Tare")
         buttonTare.pressed.connect(self.sendTare)
-        
+
         tareLayout.addWidget(buttonTare)
         tareGroupBox.setLayout(tareLayout)
 
@@ -199,20 +202,20 @@ class MainWindow(QMainWindow):
         mainLayout.addWidget(self.buttonStartBLE)
         mainLayout.addWidget(self.connectingLabel)  # Add connecting text label to the layout
         mainLayout.addWidget(weightGroupBox)  # Add the weight group box here
-        mainLayout.addWidget(analogGroupBox)  # Add the analog values group box
+        mainLayout.addWidget(analogGroupBox)  # Add the analog values table group box
         mainLayout.addWidget(self.console)    # Add console below the weight group box
         mainLayout.addWidget(tareGroupBox)
         mainLayout.addWidget(calGroupBox)
 
         widget = QWidget()
         widget.setLayout(mainLayout)
-        
+
         self.setCentralWidget(widget)
-        
+
         self.show()
         self.threadpool = QThreadPool()
         print("Multithreading with Maximum %d threads" % self.threadpool.maxThreadCount())
-    
+
     def updateSliderLabel(self, value):
         self.sliderLabel.setText(f"Value: {value}")
 
@@ -224,7 +227,7 @@ class MainWindow(QMainWindow):
         self.workerBLE.signals.signalConnected.connect(self.updateBLEButton)
         self.workerBLE.signals.signalDataParsed.connect(self.updateAnalogValues)
         self.threadpool.start(self.workerBLE)
-        
+
     def sendTare(self):
         tareCommand = "Tare"
         self.workerBLE.toSendBLE(tareCommand)
@@ -235,14 +238,14 @@ class MainWindow(QMainWindow):
         unit = self.unitToggle.currentText()
         fullCommand = f"{calibrateCommand} {sliderValue} {unit}"
         self.workerBLE.toSendBLE(fullCommand)
-        
+
     def slotMsg(self, msg):
         print(msg)
-        
+
     def slotRes(self, res):
         self.console.appendPlainText(res)
         self.updateWeightDisplay(res)
-    
+
     def updateWeightDisplay(self, message):
         # Extract weight from the message
         match = re.search(r'W:(\d+)', message)
@@ -252,11 +255,25 @@ class MainWindow(QMainWindow):
             self.weightLabel.setText(f"Weight: {weight} {unit}")
 
     def updateAnalogValues(self, data):
-        self.console.appendPlainText(str(data))  # Display each sensor data in the console widget
+        # Update the timestamp label
+        self.timestampLabel.setText(f"Timestamp: {data.timestamp}")
+
+        # Clear the table first
+        self.analogTable.clearContents()
+
+        # Set the sensor values in the table
+        self.analogTable.setItem(0, 0, QTableWidgetItem(f"AnP35: {data.anp35}"))
+        self.analogTable.setItem(0, 1, QTableWidgetItem(f"AnP36: {data.anp36}"))
+
+        self.analogTable.setItem(1, 0, QTableWidgetItem(f"AnP39: {data.anp39}"))
+        self.analogTable.setItem(1, 1, QTableWidgetItem(f"AnP34: {data.anp34}"))
+
+        self.analogTable.setItem(2, 0, QTableWidgetItem(f"AnP37: {data.anp37}"))
+        self.analogTable.setItem(2, 1, QTableWidgetItem(f"AnP38: {data.anp38}"))
 
     def setConnectingLabelVisible(self, isVisible):
         self.connectingLabel.setVisible(isVisible)
-    
+
     def updateBLEButton(self, connected):
         if connected:
             self.buttonStartBLE.setText("BLE Connected")
@@ -264,7 +281,7 @@ class MainWindow(QMainWindow):
         else:
             self.buttonStartBLE.setText("Start BLE")
             self.buttonStartBLE.setEnabled(True)
-        
+
 app = QApplication(sys.argv)
 window = MainWindow()
 app.exec()
