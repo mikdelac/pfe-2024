@@ -1,7 +1,5 @@
 import sys
-import time
 import re  # Import re for regex to parse the Bluetooth message
-
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox,
@@ -9,11 +7,38 @@ from PyQt5.QtWidgets import (
 
 from bluepy import btle
 
+class SensorData:
+    def __init__(self, timestamp, anp35=None, anp39=None, anp37=None, anp36=None, anp34=None, anp38=None):
+        self.timestamp = timestamp
+        self.anp35 = anp35
+        self.anp39 = anp39
+        self.anp37 = anp37
+        self.anp36 = anp36
+        self.anp34 = anp34
+        self.anp38 = anp38
+
+    def __str__(self):
+        data_str = f"Timestamp: {self.timestamp}"
+        if self.anp35 is not None:
+            data_str += f", AnP35: {self.anp35}"
+        if self.anp39 is not None:
+            data_str += f", AnP39: {self.anp39}"
+        if self.anp37 is not None:
+            data_str += f", AnP37: {self.anp37}"
+        if self.anp36 is not None:
+            data_str += f", AnP36: {self.anp36}"
+        if self.anp34 is not None:
+            data_str += f", AnP34: {self.anp34}"
+        if self.anp38 is not None:
+            data_str += f", AnP38: {self.anp38}"
+        return data_str
+
 class WorkerSignals(QObject):
     signalMsg = pyqtSignal(str)
     signalRes = pyqtSignal(str)
     signalConnecting = pyqtSignal(bool)
     signalConnected = pyqtSignal(bool)
+    signalDataParsed = pyqtSignal(SensorData)
 
 class MyDelegate(btle.DefaultDelegate):
     def __init__(self, sgn):
@@ -25,6 +50,30 @@ class MyDelegate(btle.DefaultDelegate):
             dataDecoded = data.decode()
             self.sgn.signalRes.emit(dataDecoded)
             print("Data: ", dataDecoded)
+
+            # Parse the data values
+            matches = re.findall(r'(\d+:\d+\.\d+),AnP(\d+):(\d+)', dataDecoded)
+            for match in matches:
+                timestamp = match[0]
+                sensor = f"AnP{match[1]}"
+                value = int(match[2])
+
+                if sensor == "AnP35":
+                    sensor_data = SensorData(timestamp, anp35=value)
+                elif sensor == "AnP39":
+                    sensor_data = SensorData(timestamp, anp39=value)
+                elif sensor == "AnP37":
+                    sensor_data = SensorData(timestamp, anp37=value)
+                elif sensor == "AnP36":
+                    sensor_data = SensorData(timestamp, anp36=value)
+                elif sensor == "AnP34":
+                    sensor_data = SensorData(timestamp, anp34=value)
+                elif sensor == "AnP38":
+                    sensor_data = SensorData(timestamp, anp38=value)
+
+                # Emit the parsed data
+                self.sgn.signalDataParsed.emit(sensor_data)
+
         except UnicodeError:
             print("UnicodeError: ", data)
 
@@ -101,6 +150,13 @@ class MainWindow(QMainWindow):
         weightLayout.addWidget(self.weightLabel)
         weightGroupBox.setLayout(weightLayout)
 
+        # Group Box for Analog Values Display
+        analogGroupBox = QGroupBox("Analog Values")
+        self.analogLabel = QLabel("No Data")
+        analogLayout = QVBoxLayout()
+        analogLayout.addWidget(self.analogLabel)
+        analogGroupBox.setLayout(analogLayout)
+
         # Group Box for Tare Controls
         tareGroupBox = QGroupBox("Tare")
         tareLayout = QVBoxLayout()
@@ -143,6 +199,7 @@ class MainWindow(QMainWindow):
         mainLayout.addWidget(self.buttonStartBLE)
         mainLayout.addWidget(self.connectingLabel)  # Add connecting text label to the layout
         mainLayout.addWidget(weightGroupBox)  # Add the weight group box here
+        mainLayout.addWidget(analogGroupBox)  # Add the analog values group box
         mainLayout.addWidget(self.console)    # Add console below the weight group box
         mainLayout.addWidget(tareGroupBox)
         mainLayout.addWidget(calGroupBox)
@@ -165,6 +222,7 @@ class MainWindow(QMainWindow):
         self.workerBLE.signals.signalRes.connect(self.slotRes)
         self.workerBLE.signals.signalConnecting.connect(self.setConnectingLabelVisible)
         self.workerBLE.signals.signalConnected.connect(self.updateBLEButton)
+        self.workerBLE.signals.signalDataParsed.connect(self.updateAnalogValues)
         self.threadpool.start(self.workerBLE)
         
     def sendTare(self):
@@ -192,6 +250,9 @@ class MainWindow(QMainWindow):
             weight = match.group(1)
             unit = self.unitToggle.currentText()  # Get current unit from the combo box
             self.weightLabel.setText(f"Weight: {weight} {unit}")
+
+    def updateAnalogValues(self, data):
+        self.console.appendPlainText(str(data))  # Display each sensor data in the console widget
 
     def setConnectingLabelVisible(self, isVisible):
         self.connectingLabel.setVisible(isVisible)
