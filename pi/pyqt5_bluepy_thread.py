@@ -212,7 +212,7 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(widget)
 
-        self.show()
+        self.showFullScreen()
         self.threadpool = QThreadPool()
         print("Multithreading with Maximum %d threads" % self.threadpool.maxThreadCount())
 
