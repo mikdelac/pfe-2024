@@ -3,7 +3,7 @@ import time
 import requests
 import re  # Import re for regex to parse the Bluetooth message
 
-from PyQt5.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox,
 )
@@ -38,28 +38,33 @@ class WorkerBLE(QRunnable):
     def run(self):
         self.signals.signalMsg.emit("WorkerBLE start")
         
-        #---------------------------------------------
-        p = btle.Peripheral("08:F9:E0:20:3E:0A")
-        p.setDelegate(MyDelegate(self.signals))
-
-        svc = p.getServiceByUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
-        self.ch_Tx = svc.getCharacteristics("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")[0]
-        ch_Rx = svc.getCharacteristics("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")[0]
-
-        setup_data = b"\x01\x00"
-        p.writeCharacteristic(ch_Rx.valHandle + 1, setup_data)
-
-        # BLE loop --------
         while True:
-            p.waitForNotifications(1.0)
-            
-            if self.rqsToSend:
-                self.rqsToSend = False
-                try:
-                    self.ch_Tx.write(self.bytestosend, True)
-                except btle.BTLEException:
-                    print("btle.BTLEException")
-            
+            try:
+                # Attempt to connect to the Bluetooth device
+                p = btle.Peripheral("08:F9:E0:20:3E:0A")
+                p.setDelegate(MyDelegate(self.signals))
+
+                svc = p.getServiceByUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
+                self.ch_Tx = svc.getCharacteristics("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")[0]
+                ch_Rx = svc.getCharacteristics("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")[0]
+
+                setup_data = b"\x01\x00"
+                p.writeCharacteristic(ch_Rx.valHandle + 1, setup_data)
+
+                # BLE loop --------
+                while True:
+                    p.waitForNotifications(1.0)
+                    
+                    if self.rqsToSend:
+                        self.rqsToSend = False
+                        try:
+                            self.ch_Tx.write(self.bytestosend, True)
+                        except btle.BTLEException:
+                            print("btle.BTLEException")
+            except btle.BTLEException as e:
+                print(f"Failed to connect: {e}")
+                time.sleep(5)  # Wait before retrying
+
         self.signals.signalMsg.emit("WorkerBLE end")
         
     def toSendBLE(self, tosend):
