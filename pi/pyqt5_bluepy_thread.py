@@ -1,6 +1,5 @@
 import sys
 import time
-import requests
 import re  # Import re for regex to parse the Bluetooth message
 
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot
@@ -13,6 +12,7 @@ from bluepy import btle
 class WorkerSignals(QObject):
     signalMsg = pyqtSignal(str)
     signalRes = pyqtSignal(str)
+    signalConnecting = pyqtSignal(bool)
 
 class MyDelegate(btle.DefaultDelegate):
     def __init__(self, sgn):
@@ -40,9 +40,11 @@ class WorkerBLE(QRunnable):
         
         while True:
             try:
+                self.signals.signalConnecting.emit(True)
                 # Attempt to connect to the Bluetooth device
                 p = btle.Peripheral("08:F9:E0:20:3E:0A")
                 p.setDelegate(MyDelegate(self.signals))
+                self.signals.signalConnecting.emit(False)
 
                 svc = p.getServiceByUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
                 self.ch_Tx = svc.getCharacteristics("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")[0]
@@ -62,6 +64,7 @@ class WorkerBLE(QRunnable):
                         except btle.BTLEException:
                             print("btle.BTLEException")
             except btle.BTLEException as e:
+                self.signals.signalConnecting.emit(False)
                 print(f"Failed to connect: {e}")
                 time.sleep(5)  # Wait before retrying
 
@@ -82,6 +85,11 @@ class MainWindow(QMainWindow):
         
         self.console = QPlainTextEdit()
         self.console.setReadOnly(True)
+        
+        # Connecting text label setup
+        self.connectingLabel = QLabel("Trying to connect to Bluetooth...", self)
+        self.connectingLabel.setAlignment(Qt.AlignCenter)
+        self.connectingLabel.setVisible(False)
         
         # Group Box for Weight Display
         weightGroupBox = QGroupBox("Weight")
@@ -130,6 +138,7 @@ class MainWindow(QMainWindow):
 
         # Adding widgets to the main layout
         mainLayout.addWidget(buttonStartBLE)
+        mainLayout.addWidget(self.connectingLabel)  # Add connecting text label to the layout
         mainLayout.addWidget(weightGroupBox)  # Add the weight group box here
         mainLayout.addWidget(self.console)    # Add console below the weight group box
         mainLayout.addWidget(tareGroupBox)
@@ -151,6 +160,7 @@ class MainWindow(QMainWindow):
         self.workerBLE = WorkerBLE()
         self.workerBLE.signals.signalMsg.connect(self.slotMsg)
         self.workerBLE.signals.signalRes.connect(self.slotRes)
+        self.workerBLE.signals.signalConnecting.connect(self.setConnectingLabelVisible)
         self.threadpool.start(self.workerBLE)
         
     def sendTare(self):
@@ -178,6 +188,9 @@ class MainWindow(QMainWindow):
             weight = match.group(1)
             unit = self.unitToggle.currentText()  # Get current unit from the combo box
             self.weightLabel.setText(f"Weight: {weight} {unit}")
+
+    def setConnectingLabelVisible(self, isVisible):
+        self.connectingLabel.setVisible(isVisible)
         
 app = QApplication(sys.argv)
 window = MainWindow()
