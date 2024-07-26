@@ -13,6 +13,7 @@ class WorkerSignals(QObject):
     signalMsg = pyqtSignal(str)
     signalRes = pyqtSignal(str)
     signalConnecting = pyqtSignal(bool)
+    signalConnected = pyqtSignal(bool)
 
 class MyDelegate(btle.DefaultDelegate):
     def __init__(self, sgn):
@@ -43,6 +44,7 @@ class WorkerBLE(QRunnable):
                 self.signals.signalConnecting.emit(True)
                 # Attempt to connect to the Bluetooth device
                 p = btle.Peripheral("08:F9:E0:20:3E:0A")
+                self.signals.signalConnected.emit(True)  # Emit connection status
                 p.setDelegate(MyDelegate(self.signals))
                 self.signals.signalConnecting.emit(False)
 
@@ -64,6 +66,7 @@ class WorkerBLE(QRunnable):
                         except btle.BTLEException:
                             print("btle.BTLEException")
             except btle.BTLEException as e:
+                self.signals.signalConnected.emit(False)  # Emit disconnection status
                 self.signals.signalConnecting.emit(False)
                 print(f"Failed to connect: {e}")
                 time.sleep(5)  # Wait before retrying
@@ -80,8 +83,8 @@ class MainWindow(QMainWindow):
         
         mainLayout = QVBoxLayout()
         
-        buttonStartBLE = QPushButton("Start BLE")
-        buttonStartBLE.pressed.connect(self.startBLE)
+        self.buttonStartBLE = QPushButton("Start BLE")
+        self.buttonStartBLE.pressed.connect(self.startBLE)
         
         self.console = QPlainTextEdit()
         self.console.setReadOnly(True)
@@ -137,7 +140,7 @@ class MainWindow(QMainWindow):
         calGroupBox.setLayout(calLayout)
 
         # Adding widgets to the main layout
-        mainLayout.addWidget(buttonStartBLE)
+        mainLayout.addWidget(self.buttonStartBLE)
         mainLayout.addWidget(self.connectingLabel)  # Add connecting text label to the layout
         mainLayout.addWidget(weightGroupBox)  # Add the weight group box here
         mainLayout.addWidget(self.console)    # Add console below the weight group box
@@ -161,6 +164,7 @@ class MainWindow(QMainWindow):
         self.workerBLE.signals.signalMsg.connect(self.slotMsg)
         self.workerBLE.signals.signalRes.connect(self.slotRes)
         self.workerBLE.signals.signalConnecting.connect(self.setConnectingLabelVisible)
+        self.workerBLE.signals.signalConnected.connect(self.updateBLEButton)
         self.threadpool.start(self.workerBLE)
         
     def sendTare(self):
@@ -191,6 +195,14 @@ class MainWindow(QMainWindow):
 
     def setConnectingLabelVisible(self, isVisible):
         self.connectingLabel.setVisible(isVisible)
+    
+    def updateBLEButton(self, connected):
+        if connected:
+            self.buttonStartBLE.setText("BLE Connected")
+            self.buttonStartBLE.setEnabled(False)
+        else:
+            self.buttonStartBLE.setText("Start BLE")
+            self.buttonStartBLE.setEnabled(True)
         
 app = QApplication(sys.argv)
 window = MainWindow()
