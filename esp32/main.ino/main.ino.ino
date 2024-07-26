@@ -227,26 +227,60 @@ void loop() {
   unsigned long currentSeconds = currentMillis / 1000;
   unsigned long currentMilliseconds = currentMillis % 1000;
 
-  // Format the time as HH:MM:SS.mmm
+  // Format the time as MM:SS.mmm
   char timeStr[20];
-  snprintf(timeStr, sizeof(timeStr), "%02lu:%02lu:%02lu.%03lu", 
-           (currentSeconds / 3600) % 24, 
+  snprintf(timeStr, sizeof(timeStr), "%02lu:%02lu.%03lu", 
            (currentSeconds / 60) % 60, 
            currentSeconds % 60, 
            currentMilliseconds);
 
-  // Format the data into a string
-  char dataStr[300];
-  snprintf(dataStr, sizeof(dataStr), "%s, Weight:%ld,A1:%ld,B1:%ld,A2:%ld,B2:%ld,AnP35:%d,AnP39:%d,AnP37:%d,AnP36:%d,AnP34:%d,AnP38:%d",
-           timeStr, weight, weightA128_1, weightB32_1, weightA128_2, weightB32_2, analogValP35, analogValP39, analogValP37, analogValP36, analogValP34, analogValP38);
+  // Format the fsr data into strings
+  char dataStr0[32];
+  snprintf(dataStr0, sizeof(dataStr0), "%s,AnP35:%d",
+           timeStr, analogValP35);
+  char dataStr1[32];
+  snprintf(dataStr1, sizeof(dataStr1), "%s,AnP39:%d",
+           timeStr, analogValP39);
+  char dataStr2[32];
+  snprintf(dataStr2, sizeof(dataStr2), "%s,AnP37:%d",
+           timeStr, analogValP37);
+  char dataStr3[32];
+  snprintf(dataStr3, sizeof(dataStr3), "%s,AnP36:%d",
+           timeStr, analogValP36);
+  char dataStr4[32];
+  snprintf(dataStr4, sizeof(dataStr4), "%s,AnP34:%d",
+           timeStr, analogValP34);
+  char dataStr5[32];
+  snprintf(dataStr5, sizeof(dataStr5), "%s,AnP38:%d",
+           timeStr, analogValP38);
+        
+  // Format the weight into strings
+  char weightStr[32];
+  snprintf(weightStr, sizeof(weightStr), "%s,W:%ld",
+           timeStr, weight);
+  Serial.println(weightStr);
 
-  Serial.println(dataStr);
 
   if (deviceConnected) {
-    // Send the data via Bluetooth
-    pTxCharacteristic->setValue(dataStr);
+    // Send the weight via Bluetooth
+    pTxCharacteristic->setValue(weightStr);
     pTxCharacteristic->notify();
-    //delay(50); // Delay to avoid congestion
+    // Send the data via Bluetooth
+    pTxCharacteristic->setValue(dataStr0);
+    pTxCharacteristic->notify();
+    pTxCharacteristic->setValue(dataStr1);
+    pTxCharacteristic->notify();
+    pTxCharacteristic->setValue(dataStr2);
+    pTxCharacteristic->notify();
+    pTxCharacteristic->setValue(dataStr3);
+    pTxCharacteristic->notify();
+    pTxCharacteristic->setValue(dataStr4);
+    pTxCharacteristic->notify();
+    pTxCharacteristic->setValue(dataStr5);
+    pTxCharacteristic->notify();
+    
+
+    delay(50); // Delay to avoid congestion
   }
 
   // disconnecting
