@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (
 )
 from bluepy import btle
 import time
+import datetime
 
 class SensorData:
     def __init__(self, timestamp=None, anp35=None, anp39=None, anp37=None, anp36=None, anp34=None, anp38=None):
@@ -198,12 +199,36 @@ class MainWindow(QMainWindow):
         calLayout.addWidget(buttonCalibrateBLE)
         calGroupBox.setLayout(calLayout)
 
+        # Group Box for BPM Controls
+        bpmGroupBox = QGroupBox("BPM Controls")
+
+        self.bpmLabel = QLabel("BPM: 0")
+        self.bpmSlider = QSlider(Qt.Horizontal)
+        self.bpmSlider.setRange(40, 200)
+        self.bpmSlider.setValue(60)
+
+        self.tapButton = QPushButton("Tap")
+        self.tapButton.pressed.connect(self.tapBPM)
+
+        self.bpmSlider.valueChanged.connect(self.updateBPM)
+
+        bpmLayout = QVBoxLayout()
+        bpmLayout.addWidget(self.bpmLabel)
+
+        bpmControlsLayout = QHBoxLayout()
+        bpmControlsLayout.addWidget(self.tapButton)
+        bpmControlsLayout.addWidget(self.bpmSlider)
+
+        bpmLayout.addLayout(bpmControlsLayout)
+        bpmGroupBox.setLayout(bpmLayout)
+
         # Adding widgets to the main layout
         mainLayout.addWidget(self.buttonStartBLE)
-        mainLayout.addWidget(self.connectingLabel)  # Add connecting text label to the layout
-        mainLayout.addWidget(weightGroupBox)  # Add the weight group box here
-        mainLayout.addWidget(analogGroupBox)  # Add the analog values table group box
-        mainLayout.addWidget(self.console)    # Add console below the weight group box
+        mainLayout.addWidget(bpmGroupBox)          # Add the BPM Controls group box
+        mainLayout.addWidget(self.connectingLabel) # Add connecting text label to the layout
+        mainLayout.addWidget(weightGroupBox)       # Add the weight group box here
+        mainLayout.addWidget(analogGroupBox)       # Add the analog values table group box
+        mainLayout.addWidget(self.console)         # Add console below the weight group box
         mainLayout.addWidget(tareGroupBox)
         mainLayout.addWidget(calGroupBox)
 
@@ -216,8 +241,27 @@ class MainWindow(QMainWindow):
         self.threadpool = QThreadPool()
         print("Multithreading with Maximum %d threads" % self.threadpool.maxThreadCount())
 
+        self.tap_times = []
+
     def updateSliderLabel(self, value):
         self.sliderLabel.setText(f"Value: {value}")
+
+    def updateBPM(self, value):
+        self.bpmLabel.setText(f"BPM: {value}")
+
+    def tapBPM(self):
+        now = datetime.datetime.now()
+        self.tap_times.append(now)
+
+        # Keep only the last 5 tap times to calculate the BPM:
+        self.tap_times = self.tap_times[-5:]
+
+        if len(self.tap_times) >= 2:
+            intervals = [(self.tap_times[i] - self.tap_times[i-1]).total_seconds() for i in range(1, len(self.tap_times))]
+            avg_interval = sum(intervals) / len(intervals)
+            bpm = int(60 / avg_interval)
+            self.bpmSlider.setValue(bpm)
+            self.updateBPM(bpm)
 
     def startBLE(self):
         # Disable the button after it's clicked
