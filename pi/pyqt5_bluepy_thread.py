@@ -1,6 +1,7 @@
 import sys
 import re
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QColor, QBrush
 from PyQt5.QtWidgets import (
     QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView
 )
@@ -260,6 +261,9 @@ class MainWindow(QMainWindow):
         self.tap_times = []
         self.fsr_value = 0
 
+        # Dictionary to keep track of the last exceed timestamps for each sensor
+        self.sensor_exceed_timestamps = { "AnP35": [], "AnP39": [], "AnP37": [], "AnP36": [], "AnP34": [], "AnP38": [] }
+
     def updateSliderLabel(self, value):
         self.sliderLabel.setText(f"Value: {value}")
 
@@ -325,18 +329,37 @@ class MainWindow(QMainWindow):
         # Update the timestamp label
         self.timestampLabel.setText(f"Timestamp: {data.timestamp}")
 
+        # Dictionary to map sensor indexes to their keys and table cell coordinates
+        sensor_map = {0: ("AnP35", 0, 0), 1: ("AnP36", 0, 1), 2: ("AnP39", 1, 0), 3: ("AnP34", 1, 1), 4: ("AnP37", 2, 0), 5: ("AnP38", 2, 1)}
+
         # Clear the table first
         self.analogTable.clearContents()
 
-        # Set the sensor values in the table
-        self.analogTable.setItem(0, 0, QTableWidgetItem(f"AnP35: {data.anp35}"))
-        self.analogTable.setItem(0, 1, QTableWidgetItem(f"AnP36: {data.anp36}"))
+        # Loop over the sensor values and update the table
+        for i, (sensor_key, row, col) in enumerate(sensor_map.values()):
+            sensor_value = getattr(data, sensor_key.lower())
+            item = QTableWidgetItem(f"{sensor_key}: {sensor_value}")
 
-        self.analogTable.setItem(1, 0, QTableWidgetItem(f"AnP39: {data.anp39}"))
-        self.analogTable.setItem(1, 1, QTableWidgetItem(f"AnP34: {data.anp34}"))
+            # Check if the sensor value exceeds the fsr_value
+            if sensor_value > self.fsr_value:
+                item.setBackground(QBrush(QColor(0, 255, 0)))  # Set background to green
+                self.registerExceed(sensor_key)
 
-        self.analogTable.setItem(2, 0, QTableWidgetItem(f"AnP37: {data.anp37}"))
-        self.analogTable.setItem(2, 1, QTableWidgetItem(f"AnP38: {data.anp38}"))
+            self.analogTable.setItem(row, col, item)
+
+    def registerExceed(self, sensor_key):
+        now = datetime.datetime.now()
+        timestamps = self.sensor_exceed_timestamps[sensor_key]
+        timestamps.append(now)
+
+        # Keep only the last 5 timestamps to calculate the rhythm
+        self.sensor_exceed_timestamps[sensor_key] = timestamps[-5:]
+
+        if len(timestamps) >= 2:
+            intervals = [(timestamps[i] - timestamps[i-1]).total_seconds() for i in range(1, len(timestamps))]
+            avg_interval = sum(intervals) / len(intervals)
+            rhythm = 1 / avg_interval  # Adjust this calculation based on desired output
+            print(f"Rhythm for {sensor_key}: {rhythm} Hz")
 
     def setConnectingLabelVisible(self, isVisible):
         self.connectingLabel.setVisible(isVisible)
