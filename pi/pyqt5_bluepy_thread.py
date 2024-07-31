@@ -172,7 +172,7 @@ class MainWindow(QMainWindow):
         tareGroupBox.setLayout(tareLayout)
 
         # Group Box for Calibrate Controls
-        calGroupBox = QGroupBox("Calibrate")
+        calGroupBox = QGroupBox("Calibrate Load Cells")
         calLayout = QVBoxLayout()
 
         sliderLayout = QHBoxLayout()
@@ -222,6 +222,21 @@ class MainWindow(QMainWindow):
         bpmLayout.addLayout(bpmControlsLayout)
         bpmGroupBox.setLayout(bpmLayout)
 
+        # Group Box for Calibrate FSR
+        fsrGroupBox = QGroupBox("Calibrate FSR")
+
+        self.fsrSlider = QSlider(Qt.Horizontal)
+        self.fsrSlider.setRange(0, 4095)
+        self.fsrSlider.setValue(0)
+        self.fsrSlider.valueChanged.connect(self.updateFSR)
+
+        self.fsrLabel = QLabel("FSR Value: 0")
+
+        fsrLayout = QVBoxLayout()
+        fsrLayout.addWidget(self.fsrSlider)
+        fsrLayout.addWidget(self.fsrLabel)
+        fsrGroupBox.setLayout(fsrLayout)
+
         # Adding widgets to the main layout
         mainLayout.addWidget(self.buttonStartBLE)
         mainLayout.addWidget(bpmGroupBox)          # Add the BPM Controls group box
@@ -231,6 +246,7 @@ class MainWindow(QMainWindow):
         mainLayout.addWidget(self.console)         # Add console below the weight group box
         mainLayout.addWidget(tareGroupBox)
         mainLayout.addWidget(calGroupBox)
+        mainLayout.addWidget(fsrGroupBox)          # Add the Calibrate FSR group box
 
         widget = QWidget()
         widget.setLayout(mainLayout)
@@ -242,6 +258,7 @@ class MainWindow(QMainWindow):
         print("Multithreading with Maximum %d threads" % self.threadpool.maxThreadCount())
 
         self.tap_times = []
+        self.fsr_value = 0
 
     def updateSliderLabel(self, value):
         self.sliderLabel.setText(f"Value: {value}")
@@ -262,6 +279,10 @@ class MainWindow(QMainWindow):
             bpm = int(60 / avg_interval)
             self.bpmSlider.setValue(bpm)
             self.updateBPM(bpm)
+
+    def updateFSR(self, value):
+        self.fsrLabel.setText(f"FSR Value: {value}")
+        self.fsr_value = value
 
     def startBLE(self):
         # Disable the button after it's clicked
