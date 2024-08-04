@@ -81,12 +81,16 @@ class WorkerBLE(QRunnable):
         self.rqsToSend = False
         self.bytestosend = b''
         self.sensor_data = SensorData()  # Maintain the sensor data state
+        self._is_running = True  # Add a state attribute to control the loop
+
+    def stop(self):
+        self._is_running = False  # Method to stop the worker
 
     @pyqtSlot()
     def run(self):
         self.signals.signalMsg.emit("WorkerBLE start")
 
-        while True:
+        while self._is_running:
             try:
                 self.signals.signalConnecting.emit(True)
                 # Attempt to connect to the Bluetooth device
@@ -103,7 +107,7 @@ class WorkerBLE(QRunnable):
                 p.writeCharacteristic(ch_Rx.valHandle + 1, setup_data)
 
                 # BLE loop --------
-                while True:
+                while self._is_running:
                     p.waitForNotifications(1.0)
 
                     if self.rqsToSend:
@@ -152,11 +156,12 @@ class MainWindow(QMainWindow):
         analogGroupBox = QGroupBox("Analog Values")
 
         self.timestampLabel = QLabel("Timestamp: N/A")
-        self.analogTable = QTableWidget(3, 2)  # 3 rows, 2 columns
+        self.analogTable = QTableWidget(6, 1)  # 6 rows, 1 column
         # Remove header labels
         self.analogTable.horizontalHeader().setVisible(False)
         self.analogTable.verticalHeader().setVisible(False)
         self.analogTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.analogTable.verticalHeader().setSectionResizeMode(QHeaderView.Stretch)
         analogLayout = QVBoxLayout()
         analogLayout.addWidget(self.timestampLabel)
         analogLayout.addWidget(self.analogTable)
@@ -264,6 +269,9 @@ class MainWindow(QMainWindow):
         # Dictionary to keep track of the last exceed timestamps for each sensor
         self.sensor_exceed_timestamps = { "AnP35": [], "AnP39": [], "AnP37": [], "AnP36": [], "AnP34": [], "AnP38": [] }
 
+        # Worker instance tracking
+        self.workerBLE = None
+
     def updateSliderLabel(self, value):
         self.sliderLabel.setText(f"Value: {value}")
 
@@ -291,6 +299,12 @@ class MainWindow(QMainWindow):
     def startBLE(self):
         # Disable the button after it's clicked
         self.buttonStartBLE.setEnabled(False)
+        
+        # Stop any existing worker if running
+        if self.workerBLE is not None:
+            self.workerBLE.stop()
+            self.threadpool.waitForDone()
+
         self.workerBLE = WorkerBLE()
         self.workerBLE.signals.signalMsg.connect(self.slotMsg)
         self.workerBLE.signals.signalRes.connect(self.slotRes)
@@ -330,13 +344,13 @@ class MainWindow(QMainWindow):
         self.timestampLabel.setText(f"Timestamp: {data.timestamp}")
 
         # Dictionary to map sensor indexes to their keys and table cell coordinates
-        sensor_map = {0: ("AnP35", 0, 0), 1: ("AnP36", 0, 1), 2: ("AnP39", 1, 0), 3: ("AnP34", 1, 1), 4: ("AnP37", 2, 0), 5: ("AnP38", 2, 1)}
+        sensor_map = {0: ("AnP35", 0), 1: ("AnP34", 1), 2: ("AnP39", 2), 3: ("AnP38", 3), 4: ("AnP37", 4), 5: ("AnP36", 5)}
 
         # Clear the table first
         self.analogTable.clearContents()
 
         # Loop over the sensor values and update the table
-        for i, (sensor_key, row, col) in enumerate(sensor_map.values()):
+        for i, (sensor_key, row) in enumerate(sensor_map.values()):
             sensor_value = getattr(data, sensor_key.lower())
             item = QTableWidgetItem(f"{sensor_key}: {sensor_value}")
 
@@ -345,7 +359,7 @@ class MainWindow(QMainWindow):
                 item.setBackground(QBrush(QColor(0, 255, 0)))  # Set background to green
                 self.registerExceed(sensor_key)
 
-            self.analogTable.setItem(row, col, item)
+            self.analogTable.setItem(row, 0, item)
 
     def registerExceed(self, sensor_key):
         now = datetime.datetime.now()
@@ -370,7 +384,13 @@ class MainWindow(QMainWindow):
             self.buttonStartBLE.setEnabled(False)
         else:
             self.buttonStartBLE.setText("Start BLE")
-            self.buttonStartBLE.setEnabled(False)  # Keep the button disabled if not connected
+            self.buttonStartBLE.setEnabled(True)
+
+            # Stop the current worker if there's a disconnection
+            if self.workerBLE is not None:
+                self.workerBLE.stop()
+                self.threadpool.waitForDone()
+                self.workerBLE = None  # Clean up the reference
 
 app = QApplication(sys.argv)
 window = MainWindow()
