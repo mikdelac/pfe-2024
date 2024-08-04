@@ -81,12 +81,16 @@ class WorkerBLE(QRunnable):
         self.rqsToSend = False
         self.bytestosend = b''
         self.sensor_data = SensorData()  # Maintain the sensor data state
+        self._is_running = True  # Add a state attribute to control the loop
+
+    def stop(self):
+        self._is_running = False  # Method to stop the worker
 
     @pyqtSlot()
     def run(self):
         self.signals.signalMsg.emit("WorkerBLE start")
 
-        while True:
+        while self._is_running:
             try:
                 self.signals.signalConnecting.emit(True)
                 # Attempt to connect to the Bluetooth device
@@ -103,7 +107,7 @@ class WorkerBLE(QRunnable):
                 p.writeCharacteristic(ch_Rx.valHandle + 1, setup_data)
 
                 # BLE loop --------
-                while True:
+                while self._is_running:
                     p.waitForNotifications(1.0)
 
                     if self.rqsToSend:
@@ -119,10 +123,6 @@ class WorkerBLE(QRunnable):
                 time.sleep(5)  # Wait before retrying
 
         self.signals.signalMsg.emit("WorkerBLE end")
-
-    def toSendBLE(self, tosend):
-        self.bytestosend = bytes(tosend, 'utf-8')
-        self.rqsToSend = True
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -265,6 +265,9 @@ class MainWindow(QMainWindow):
         # Dictionary to keep track of the last exceed timestamps for each sensor
         self.sensor_exceed_timestamps = { "AnP35": [], "AnP39": [], "AnP37": [], "AnP36": [], "AnP34": [], "AnP38": [] }
 
+        # Worker instance tracking
+        self.workerBLE = None
+
     def updateSliderLabel(self, value):
         self.sliderLabel.setText(f"Value: {value}")
 
@@ -292,6 +295,12 @@ class MainWindow(QMainWindow):
     def startBLE(self):
         # Disable the button after it's clicked
         self.buttonStartBLE.setEnabled(False)
+        
+        # Stop any existing worker if running
+        if self.workerBLE is not None:
+            self.workerBLE.stop()
+            self.threadpool.waitForDone()
+
         self.workerBLE = WorkerBLE()
         self.workerBLE.signals.signalMsg.connect(self.slotMsg)
         self.workerBLE.signals.signalRes.connect(self.slotRes)
@@ -371,7 +380,13 @@ class MainWindow(QMainWindow):
             self.buttonStartBLE.setEnabled(False)
         else:
             self.buttonStartBLE.setText("Start BLE")
-            self.buttonStartBLE.setEnabled(False)  # Keep the button disabled if not connected
+            self.buttonStartBLE.setEnabled(True)
+
+            # Stop the current worker if there's a disconnection
+            if self.workerBLE is not None:
+                self.workerBLE.stop()
+                self.threadpool.waitForDone()
+                self.workerBLE = None  # Clean up the reference
 
 app = QApplication(sys.argv)
 window = MainWindow()
