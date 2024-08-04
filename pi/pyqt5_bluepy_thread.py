@@ -124,6 +124,10 @@ class WorkerBLE(QRunnable):
 
         self.signals.signalMsg.emit("WorkerBLE end")
 
+    def toSendBLE(self, tosend):
+        self.bytestosend = bytes(tosend, 'utf-8')
+        self.rqsToSend = True
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
