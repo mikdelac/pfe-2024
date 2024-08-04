@@ -5,13 +5,22 @@
 #include <BLE2902.h>
 #include <esp_system.h>
 #include <string>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include "esp_task_wdt.h"
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
 
+#define DISABLE_LOADCELLS
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+
+#define NORMAL_OPERATION 0
+#define NEED_TARING 1
+#define NEED_SCALING 2
+uint8_t weightOperation = 1;
 
 // Define the pins for the HX711 communication
 const uint8_t DATA_PIN1 = 33;  // Can use any pins!
@@ -27,8 +36,12 @@ bool    taredUnit = false; // Default to kg (false: kg, true: lbs)
 
 // Scaling operation variables
 uint8_t needScaling = 0;
-uint8_t scaleFactor = 1;
-int32_t weight = 0;
+float   scaleFactor = 1;
+float   weight = 0;
+int32_t weightA128_1;
+int32_t weightB32_1;
+int32_t weightA128_2;
+int32_t weightB32_2;
 
 BLEServer *pServer = NULL;
 BLECharacteristic *pTxCharacteristic;
@@ -38,17 +51,92 @@ bool oldDeviceConnected = false;
 Adafruit_HX711 hx711_1(DATA_PIN1, CLOCK_PIN1);
 Adafruit_HX711 hx711_2(DATA_PIN2, CLOCK_PIN2);
 
+// Function that you want to run asynchronously
+void asyncFunction(void * parameter) {
+    // Cast the parameter to the appropriate type
+    uint8_t* weightOperationPtr = (uint8_t*) parameter;
+
+    while (true) {
+                Serial.print("Weight operation: ");
+                Serial.println(*weightOperationPtr);
+
+        switch (*weightOperationPtr) {
+
+            case NEED_TARING:
+                // tare
+                tareSensors();
+
+                weightOperation = NORMAL_OPERATION;
+                break;
+
+            case NEED_SCALING:
+                Serial.println("Calibrating....");
+                //scale
+                //const int numSamples = 10; // Define the number of samples
+
+                for (uint8_t t = 0; t < 10; t++) {
+                    int32_t weightA128_1 = hx711_1.readChannelBlocking(CHAN_A_GAIN_64);
+                    int32_t weightB32_1 = hx711_1.readChannelBlocking(CHAN_B_GAIN_32);
+                    int32_t weightA128_2 = hx711_2.readChannelBlocking(CHAN_A_GAIN_64);
+                    int32_t weightB32_2 = hx711_2.readChannelBlocking(CHAN_B_GAIN_32);
+
+                    float weightSum = abs(weightA128_1) + abs(weightB32_1) + abs(weightA128_2) + abs(weightB32_2);
+
+                    if (t == 0) {
+                        scaleFactor = weightSum / taredValue;
+                    } else {
+                        scaleFactor = (scaleFactor + weightSum / taredValue) / 2.0;
+                    }
+                    // Yield control back to the FreeRTOS scheduler
+                    vTaskDelay(1); // Yield to prevent watchdog timer from triggering
+                }
+
+                Serial.print("Scale Factor: ");
+                Serial.println(scaleFactor);
+
+                weightOperation = NORMAL_OPERATION;
+
+                break;
+                
+            case NORMAL_OPERATION:
+                Serial.println("Normal operation loop");
+                weightA128_1 = hx711_1.readChannelBlocking(CHAN_A_GAIN_64);
+                weightB32_1 = hx711_1.readChannelBlocking(CHAN_B_GAIN_32);
+                weightA128_2 = hx711_2.readChannelBlocking(CHAN_A_GAIN_64);
+                weightB32_2 = hx711_2.readChannelBlocking(CHAN_B_GAIN_32);
+                char string[200];
+                snprintf(string, sizeof(string), "WA1:%d,WB1:%d,WA2:%d,WB2:%d", 
+                  weightA128_1, 
+                  weightB32_1, 
+                  weightA128_2,
+                  weightB32_2);
+                Serial.println(string);
+
+                weight = ( abs((float)weightA128_1) + abs((float)weightB32_1) + abs((float)weightA128_2) + abs((float)weightB32_2) ) / scaleFactor;
+
+                break;
+            default:
+                break;
+        }
+        
+        delay(1000); // 1-second delay
+    }
+}
+
+
 void tareSensors() {
   Serial.println("Tareing....");
   for (uint8_t t = 0; t < 3; t++) {
-    hx711_1.tareA(hx711_1.readChannelRaw(CHAN_A_GAIN_128));
-    hx711_1.tareA(hx711_1.readChannelRaw(CHAN_A_GAIN_128));
+    hx711_1.tareA(hx711_1.readChannelRaw(CHAN_A_GAIN_64));
+    hx711_1.tareA(hx711_1.readChannelRaw(CHAN_A_GAIN_64));
     hx711_1.tareB(hx711_1.readChannelRaw(CHAN_B_GAIN_32));
     hx711_1.tareB(hx711_1.readChannelRaw(CHAN_B_GAIN_32));
-    hx711_2.tareA(hx711_2.readChannelRaw(CHAN_A_GAIN_128));
-    hx711_2.tareA(hx711_2.readChannelRaw(CHAN_A_GAIN_128));
+    hx711_2.tareA(hx711_2.readChannelRaw(CHAN_A_GAIN_64));
+    hx711_2.tareA(hx711_2.readChannelRaw(CHAN_A_GAIN_64));
     hx711_2.tareB(hx711_2.readChannelRaw(CHAN_B_GAIN_32));
     hx711_2.tareB(hx711_2.readChannelRaw(CHAN_B_GAIN_32));
+    // Yield control back to the FreeRTOS scheduler
+    vTaskDelay(1); // Yield to prevent watchdog timer from triggering
   }
 }
 
@@ -90,7 +178,7 @@ public:
                 Serial.println("Executing Calibrate command...");
                 
                 // Assign scale operation variables
-                needScaling = 1;
+                weightOperation = NEED_SCALING;
                 size_t secondSpaceIndex = rxValue.find(' ', firstSpaceIndex + 1);
                 size_t thirdSpaceIndex = rxValue.find(' ', secondSpaceIndex + 1);
                 std::string tempTaredValue = rxValue.substr(firstSpaceIndex + 1, secondSpaceIndex - firstSpaceIndex - 1);
@@ -108,7 +196,7 @@ public:
 
             } else if (rxValue_command == "Tare") {
                 // Assign tare operation variables
-                needTaring = 1;
+                weightOperation = NEED_TARING;
 
             } else {
                 Serial.print("Unknown command received: ");
@@ -166,6 +254,16 @@ void setup() {
 
   Serial.println("Adafruit HX711 Test!");
 
+        // Create a FreeRTOS task
+    xTaskCreate(
+        asyncFunction,  // Function to be executed
+        "Async Task",   // Name of the task
+        10000,          // Stack size (in words)
+        &weightOperation,           // Parameter to pass
+        1,              // Task priority
+        NULL            // Task handle
+    );
+
   // Initialize the HX711
   Serial.print("Initialising HX711_1 on pins ");
   Serial.print(DATA_PIN1);
@@ -181,38 +279,6 @@ void setup() {
 }
 
 void loop() {
-
-  if (needTaring == 1) {
-    // tare
-    tareSensors();
-    needTaring = 0;
-  }
-  // Read weight values
-  // !! Ralentit énormément la loop principale du ESP32 !!
-  int32_t weightA128_1 = hx711_1.readChannelBlocking(CHAN_A_GAIN_128);
-  int32_t weightB32_1 = hx711_1.readChannelBlocking(CHAN_B_GAIN_32);
-  int32_t weightA128_2 = hx711_2.readChannelBlocking(CHAN_A_GAIN_128);
-  int32_t weightB32_2 = hx711_2.readChannelBlocking(CHAN_B_GAIN_32);
-
-  // Set scaleFactor
-  if (needScaling == 1) {
-    Serial.println("Calibrating....");
-    //scale
-      for (uint8_t t = 0; t < 10; t++) {
-          int32_t weightA128_1 = hx711_1.readChannelBlocking(CHAN_A_GAIN_128);
-          int32_t weightB32_1 = hx711_1.readChannelBlocking(CHAN_B_GAIN_32);
-          int32_t weightA128_2 = hx711_2.readChannelBlocking(CHAN_A_GAIN_128);
-          int32_t weightB32_2 = hx711_2.readChannelBlocking(CHAN_B_GAIN_32);
-          if (t == 0) {
-            scaleFactor = ( abs(weightA128_1) + abs(weightB32_1) + abs(weightA128_2) + abs(weightB32_2) ) / taredValue;
-          } else {
-            scaleFactor = ( scaleFactor + ( abs(weightA128_1) + abs(weightB32_1) + abs(weightA128_2) + abs(weightB32_2) ) / taredValue) / 2;
-          }
-      }
-    Serial.println(scaleFactor);
-    needScaling = 0;
-  }
-  weight = ( abs(weightA128_1) + abs(weightB32_1) + abs(weightA128_2) + abs(weightB32_2) ) / scaleFactor;
 
   // Read analog values
   int analogValP35 = analogRead(35);
@@ -253,12 +319,12 @@ void loop() {
   char dataStr5[32];
   snprintf(dataStr5, sizeof(dataStr5), "%s,AnP38:%d",
            timeStr, analogValP38);
-        
+      
   // Format the weight into strings
   char weightStr[32];
   snprintf(weightStr, sizeof(weightStr), "%s,W:%ld",
-           timeStr, weight);
-  Serial.println(weightStr);
+           timeStr, (int)weight);
+  //Serial.println(weightStr);
 
 
   if (deviceConnected) {
