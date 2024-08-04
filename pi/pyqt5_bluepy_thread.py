@@ -1,10 +1,8 @@
 import sys
 import re
-from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot, QProcess
 from PyQt5.QtGui import QColor, QBrush
-from PyQt5.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView
-)
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView
 from bluepy import btle
 import time
 import datetime
@@ -134,6 +132,11 @@ class MainWindow(QMainWindow):
 
         mainLayout = QVBoxLayout()
 
+        # Add Reset Button at the top of the screen
+        self.buttonResetApp = QPushButton("Reset App")
+        self.buttonResetApp.pressed.connect(self.resetApp)
+
+        # Add Start BLE Button
         self.buttonStartBLE = QPushButton("Start BLE")
         self.buttonStartBLE.pressed.connect(self.startBLE)
 
@@ -244,6 +247,7 @@ class MainWindow(QMainWindow):
         fsrGroupBox.setLayout(fsrLayout)
 
         # Adding widgets to the main layout
+        mainLayout.addWidget(self.buttonResetApp)  # Add Reset Button to the top
         mainLayout.addWidget(self.buttonStartBLE)
         mainLayout.addWidget(bpmGroupBox)          # Add the BPM Controls group box
         mainLayout.addWidget(self.connectingLabel) # Add connecting text label to the layout
@@ -391,6 +395,12 @@ class MainWindow(QMainWindow):
                 self.workerBLE.stop()
                 self.threadpool.waitForDone()
                 self.workerBLE = None  # Clean up the reference
+
+    def resetApp(self):
+        # Method to reset the app
+        print("Resetting the application...")
+        QProcess.startDetached(sys.executable, sys.argv)  # Restart the app
+        QApplication.exit()
 
 app = QApplication(sys.argv)
 window = MainWindow()
