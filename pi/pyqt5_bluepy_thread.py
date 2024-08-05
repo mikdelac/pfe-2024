@@ -82,6 +82,8 @@ class WorkerBLE(QRunnable):
         self.bytestosend = b''
         self.sensor_data = SensorData()  # Maintain the sensor data state
         self._is_running = True  # Add a state attribute to control the loop
+        self.max_retries = 5  # Maximum number of retries for connection
+        self.retry_delay = 5  # Delay between retries (in seconds)
 
     def stop(self):
         self._is_running = False  # Method to stop the worker
@@ -90,21 +92,25 @@ class WorkerBLE(QRunnable):
     def run(self):
         self.signals.signalMsg.emit("WorkerBLE start")
 
+        retry_count = 0
+
         while self._is_running:
             try:
-                self.signals.signalConnecting.emit(True)
                 # Attempt to connect to the Bluetooth device
+                self.signals.signalConnecting.emit(True)
                 p = btle.Peripheral("08:F9:E0:20:3E:0A")
-                self.signals.signalConnected.emit(True)  # Emit connection status
+                self.signals.signalConnected.emit(True)
                 p.setDelegate(MyDelegate(self.signals, self.sensor_data))
                 self.signals.signalConnecting.emit(False)
-
+                
                 svc = p.getServiceByUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
                 self.ch_Tx = svc.getCharacteristics("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")[0]
                 ch_Rx = svc.getCharacteristics("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")[0]
 
                 setup_data = b"\x01\x00"
                 p.writeCharacteristic(ch_Rx.valHandle + 1, setup_data)
+
+                retry_count = 0  # Reset retry count on successful connection
 
                 # BLE loop --------
                 while self._is_running:
@@ -120,8 +126,13 @@ class WorkerBLE(QRunnable):
                 self.signals.signalConnected.emit(False)
                 self.signals.signalConnecting.emit(False)
                 print(f"Failed to connect: {e}")
-                time.sleep(5)  # Wait before retrying
+                time.sleep(self.retry_delay)
+                retry_count += 1
 
+                if retry_count >= self.max_retries:
+                    print("Max retries reached, stopping worker...")
+                    self.stop()
+        
         self.signals.signalMsg.emit("WorkerBLE end")
 
     def toSendBLE(self, tosend):
