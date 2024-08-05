@@ -2,7 +2,9 @@ import sys
 import re
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot, QProcess
 from PyQt5.QtGui import QColor, QBrush
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView
+from PyQt5.QtWidgets import (
+    QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView
+)
 from bluepy import btle
 import time
 import datetime
@@ -361,9 +363,6 @@ class MainWindow(QMainWindow):
         # Dictionary to map sensor indexes to their keys and table cell coordinates
         sensor_map = {0: ("AnP35", 0), 1: ("AnP34", 1), 2: ("AnP39", 2), 3: ("AnP38", 3), 4: ("AnP37", 4), 5: ("AnP36", 5)}
 
-        # Clear the table first
-        self.analogTable.clearContents()
-
         # Loop over the sensor values and update the table
         for i, (sensor_key, row) in enumerate(sensor_map.values()):
             sensor_value = getattr(data, sensor_key.lower())
@@ -373,6 +372,14 @@ class MainWindow(QMainWindow):
             if sensor_value > self.fsr_value and self.sensor_last_values[sensor_key] == 0:
                 item.setBackground(QBrush(QColor(0, 255, 0)))  # Set background to green
                 self.registerExceed(sensor_key)
+            elif sensor_value > self.fsr_value:
+                # Check background color to ensure it stays green if the value still exceeds fsr_value
+                current_color = QColor(item.background().color())
+                if current_color != QColor(0, 255, 0):
+                    item.setBackground(QBrush(QColor(0, 255, 0)))  # Maintain background green
+            else:
+                # Clear the background if the condition is not met anymore
+                item.setBackground(QBrush(QColor(Qt.transparent)))
 
             self.analogTable.setItem(row, 0, item)
             self.sensor_last_values[sensor_key] = sensor_value
@@ -388,14 +395,14 @@ class MainWindow(QMainWindow):
         if len(timestamps) >= 2:
             intervals = [(timestamps[i] - timestamps[i-1]).total_seconds() for i in range(1, len(timestamps))]
             avg_interval = sum(intervals) / len(intervals)
-            rhythm = 1 / avg_interval  # Adjust this calculation based on desired output
-            print(f"Rhythm for {sensor_key}: {rhythm} Hz")
+            bpm = int(60 / avg_interval)
+            print(f"Rhythm for {sensor_key}: {bpm} BPM")
 
-            # Update cadence label with the calculated rhythm
-            self.updateCadence(rhythm*60)
+            # Update cadence label with the calculated BPM
+            self.updateCadence(bpm)
 
-    def updateCadence(self, rhythm):
-        self.cadenceLabel.setText(f"Cadence: {rhythm:.2f} BPM")
+    def updateCadence(self, bpm):
+        self.cadenceLabel.setText(f"Cadence: {bpm} BPM")
 
     def setConnectingLabelVisible(self, isVisible):
         self.connectingLabel.setVisible(isVisible)
