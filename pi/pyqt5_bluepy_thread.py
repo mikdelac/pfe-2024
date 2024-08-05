@@ -115,7 +115,7 @@ class WorkerBLE(QRunnable):
                         except btle.BTLEException:
                             print("btle.BTLEException")
             except btle.BTLEException as e:
-                self.signals.signalConnected.emit(False)  # Emit disconnection status
+                self.signals.signalConnected.emit(False)
                 self.signals.signalConnecting.emit(False)
                 print(f"Failed to connect: {e}")
                 time.sleep(5)  # Wait before retrying
@@ -231,6 +231,15 @@ class MainWindow(QMainWindow):
         bpmLayout.addLayout(bpmControlsLayout)
         bpmGroupBox.setLayout(bpmLayout)
 
+        # New Group Box for Cadence Controls
+        cadenceGroupBox = QGroupBox("Cadence")
+
+        self.cadenceLabel = QLabel("Cadence: 0 BPM")
+
+        cadenceLayout = QVBoxLayout()
+        cadenceLayout.addWidget(self.cadenceLabel)
+        cadenceGroupBox.setLayout(cadenceLayout)
+
         # Group Box for Calibrate FSR
         fsrGroupBox = QGroupBox("Calibrate FSR")
 
@@ -250,6 +259,7 @@ class MainWindow(QMainWindow):
         mainLayout.addWidget(self.buttonResetApp)  # Add Reset Button to the top
         mainLayout.addWidget(self.buttonStartBLE)
         mainLayout.addWidget(bpmGroupBox)          # Add the BPM Controls group box
+        mainLayout.addWidget(cadenceGroupBox)      # Add the Cadence group box near BPM controls
         mainLayout.addWidget(self.connectingLabel) # Add connecting text label to the layout
         mainLayout.addWidget(weightGroupBox)       # Add the weight group box here
         mainLayout.addWidget(analogGroupBox)       # Add the analog values table group box
@@ -272,6 +282,7 @@ class MainWindow(QMainWindow):
 
         # Dictionary to keep track of the last exceed timestamps for each sensor
         self.sensor_exceed_timestamps = { "AnP35": [], "AnP39": [], "AnP37": [], "AnP36": [], "AnP34": [], "AnP38": [] }
+        self.sensor_last_values = { "AnP35": 0, "AnP39": 0, "AnP37": 0, "AnP36": 0, "AnP34": 0, "AnP38": 0 }
 
         # Worker instance tracking
         self.workerBLE = None
@@ -358,12 +369,13 @@ class MainWindow(QMainWindow):
             sensor_value = getattr(data, sensor_key.lower())
             item = QTableWidgetItem(f"{sensor_key}: {sensor_value}")
 
-            # Check if the sensor value exceeds the fsr_value
-            if sensor_value > self.fsr_value:
+            # Check if the sensor value exceeds the fsr_value and if it transitioned from 0
+            if sensor_value > self.fsr_value and self.sensor_last_values[sensor_key] == 0:
                 item.setBackground(QBrush(QColor(0, 255, 0)))  # Set background to green
                 self.registerExceed(sensor_key)
 
             self.analogTable.setItem(row, 0, item)
+            self.sensor_last_values[sensor_key] = sensor_value
 
     def registerExceed(self, sensor_key):
         now = datetime.datetime.now()
@@ -378,6 +390,12 @@ class MainWindow(QMainWindow):
             avg_interval = sum(intervals) / len(intervals)
             rhythm = 1 / avg_interval  # Adjust this calculation based on desired output
             print(f"Rhythm for {sensor_key}: {rhythm} Hz")
+
+            # Update cadence label with the calculated rhythm
+            self.updateCadence(rhythm*60)
+
+    def updateCadence(self, rhythm):
+        self.cadenceLabel.setText(f"Cadence: {rhythm:.2f} BPM")
 
     def setConnectingLabelVisible(self, isVisible):
         self.connectingLabel.setVisible(isVisible)
