@@ -102,7 +102,7 @@ class WorkerBLE(QRunnable):
                 self.signals.signalConnected.emit(True)
                 p.setDelegate(MyDelegate(self.signals, self.sensor_data))
                 self.signals.signalConnecting.emit(False)
-                
+
                 svc = p.getServiceByUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
                 self.ch_Tx = svc.getCharacteristics("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")[0]
                 ch_Rx = svc.getCharacteristics("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")[0]
@@ -132,7 +132,7 @@ class WorkerBLE(QRunnable):
                 if retry_count >= self.max_retries:
                     print("Max retries reached, stopping worker...")
                     self.stop()
-        
+
         self.signals.signalMsg.emit("WorkerBLE end")
 
     def toSendBLE(self, tosend):
@@ -299,12 +299,16 @@ class MainWindow(QMainWindow):
 
         # Worker instance tracking
         self.workerBLE = None
+        self.current_bpm = 0
+        self.current_cadence = 0
 
     def updateSliderLabel(self, value):
         self.sliderLabel.setText(f"Value: {value}")
 
     def updateBPM(self, value):
         self.bpmLabel.setText(f"BPM: {value}")
+        self.current_bpm = value
+        self.checkAndSendLightCommand()
 
     def tapBPM(self):
         now = datetime.datetime.now()
@@ -351,6 +355,18 @@ class MainWindow(QMainWindow):
         unit = self.unitToggle.currentText()
         fullCommand = f"{calibrateCommand} {sliderValue} {unit}"
         self.workerBLE.toSendBLE(fullCommand)
+
+    def sendLightCommand(self):
+        lightCommand = "Light"
+        self.workerBLE.toSendBLE(lightCommand)
+        print("Light command sent")
+
+    def checkAndSendLightCommand(self):
+        if self.current_bpm > 0 and self.current_cadence > 0:
+            lower_bound = self.current_bpm * 0.9
+            upper_bound = self.current_bpm * 1.1
+            if lower_bound <= self.current_cadence <= upper_bound:
+                self.sendLightCommand()
 
     def slotMsg(self, msg):
         print(msg)
@@ -414,6 +430,8 @@ class MainWindow(QMainWindow):
 
     def updateCadence(self, bpm):
         self.cadenceLabel.setText(f"Cadence: {bpm} BPM")
+        self.current_cadence = bpm
+        self.checkAndSendLightCommand()
 
     def setConnectingLabelVisible(self, isVisible):
         self.connectingLabel.setVisible(isVisible)
@@ -441,4 +459,5 @@ class MainWindow(QMainWindow):
 app = QApplication(sys.argv)
 window = MainWindow()
 app.exec()
+
 
