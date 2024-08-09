@@ -346,7 +346,7 @@ void loop() {
     pTxCharacteristic->notify();
     
 
-    delay(50); // Delay to avoid congestion
+    delay(200); // Delay to avoid congestion
   }
 
   // disconnecting
