@@ -8,6 +8,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "esp_task_wdt.h"
+#include <Wire.h> // Needed for I2C
+#include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h> // Click here to get the library: http://librarymanager/All#SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
@@ -21,6 +23,14 @@
 #define NEED_TARING 1
 #define NEED_SCALING 2
 uint8_t weightOperation = 1;
+
+// I2C
+TwoWire myWire(0);
+SFE_MAX1704X lipo; // Defaults to the MAX17043
+
+double voltage = 0; // Variable to keep track of LiPo voltage
+double soc = 0; // Variable to keep track of LiPo state-of-charge (SOC)
+bool alert; // Variable to keep track of whether alert has been triggered
 
 // Define the pins for the HX711 communication
 const uint8_t DATA_PIN1 = 33;  // Can use any pins!
@@ -232,6 +242,7 @@ public:
 
 void setup() {
   Serial.begin(115200);
+
   /*  FSR  */
   pinMode(36, INPUT);
   pinMode(37, INPUT);
@@ -247,6 +258,25 @@ void setup() {
   digitalWrite(23, LOW);
   digitalWrite(18, LOW);
   digitalWrite(10, LOW);
+
+  /* I2C */
+  myWire.begin();
+  lipo.enableDebugging(Serial); // Uncomment this line to enable helpful debug messages on non-standard serial
+  // Set up the MAX17043 LiPo fuel gauge:
+  if (lipo.begin(myWire) == false) // Connect to the MAX17043 using non-standard wire port
+  {
+    Serial.println(F("MAX17043 not detected. Please check wiring. Freezing."));
+    while (1)
+      ;
+  }
+  // Quick start restarts the MAX17043 in hopes of getting a more accurate
+	// guess for the SOC.
+	lipo.quickStart();
+
+	// We can set an interrupt to alert when the battery SoC gets too low.
+	// We can alert at anywhere between 1% - 32%:
+	lipo.setThreshold(20); // Set alert threshold to 20%.
+
 
   // Create the BLE Device
   BLEDevice::init("esp32");  // Set the device name to "esp32"
@@ -322,6 +352,12 @@ void setup() {
 }
 
 void loop() {
+    // lipo.getVoltage() returns a voltage value (e.g. 3.93)
+  voltage = lipo.getVoltage();
+  // lipo.getSOC() returns the estimated state of charge (e.g. 79%)
+  soc = lipo.getSOC();
+  // lipo.getAlert() returns a 0 or 1 (0=alert not triggered)
+  alert = lipo.getAlert();
 
   // Read analog values
   int analogValP35 = analogRead(35);
@@ -369,10 +405,20 @@ void loop() {
            timeStr, (int)weight);
   //Serial.println(weightStr);
 
+    // Format the soc into strings
+  char socStr[32];
+  snprintf(socStr, sizeof(socStr), "%s,B:%ld",
+           timeStr, (int)soc);
+  //Serial.println(socStr);
+
+
 
   if (deviceConnected) {
     // Send the weight via Bluetooth
     pTxCharacteristic->setValue(weightStr);
+    pTxCharacteristic->notify();
+    // Send the weight via Bluetooth
+    pTxCharacteristic->setValue(socStr);
     pTxCharacteristic->notify();
     // Send the data via Bluetooth
     pTxCharacteristic->setValue(dataStr0);
