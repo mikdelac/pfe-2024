@@ -232,8 +232,8 @@ class MainWindow(QMainWindow):
 
         self.bpmLabel = QLabel("BPM: 0")
         self.bpmSlider = QSlider(Qt.Horizontal)
-        self.bpmSlider.setRange(40, 200)
-        self.bpmSlider.setValue(60)
+        self.bpmSlider.setRange(0, 100)
+        self.bpmSlider.setValue(30)
 
         self.tapButton = QPushButton("Tap")
         self.tapButton.pressed.connect(self.tapBPM)
@@ -373,6 +373,13 @@ class MainWindow(QMainWindow):
             upper_bound = self.current_bpm * 1.1
             if lower_bound <= self.current_cadence <= upper_bound:
                 self.sendLightCommand()
+            else:
+                if self.current_cadence > self.current_bpm:
+                    self.workerBLE.toSendBLE("Faster")
+                    print("Sent 'Faster' command")
+                elif self.current_cadence < self.current_bpm:
+                    self.workerBLE.toSendBLE("Slower")
+                    print("Sent 'Slower' command")
 
     def slotMsg(self, msg):
         print(msg)
