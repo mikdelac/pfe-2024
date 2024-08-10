@@ -232,8 +232,8 @@ class MainWindow(QMainWindow):
 
         self.bpmLabel = QLabel("BPM: 0")
         self.bpmSlider = QSlider(Qt.Horizontal)
-        self.bpmSlider.setRange(40, 200)
-        self.bpmSlider.setValue(60)
+        self.bpmSlider.setRange(0, 100)
+        self.bpmSlider.setValue(30)
 
         self.tapButton = QPushButton("Tap")
         self.tapButton.pressed.connect(self.tapBPM)
