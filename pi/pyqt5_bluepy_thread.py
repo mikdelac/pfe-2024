@@ -373,6 +373,13 @@ class MainWindow(QMainWindow):
             upper_bound = self.current_bpm * 1.1
             if lower_bound <= self.current_cadence <= upper_bound:
                 self.sendLightCommand()
+            else:
+                if self.current_cadence > self.current_bpm:
+                    self.workerBLE.toSendBLE("Faster")
+                    print("Sent 'Faster' command")
+                elif self.current_cadence < self.current_bpm:
+                    self.workerBLE.toSendBLE("Slower")
+                    print("Sent 'Slower' command")
 
     def slotMsg(self, msg):
         print(msg)
