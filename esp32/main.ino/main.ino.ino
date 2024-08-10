@@ -55,6 +55,9 @@ int32_t weightB32_2;
 
 // Lighting operation
 bool needLight = false;
+bool needFaster = false;
+bool needSlower = false;
+
 
 // BLE
 BLEServer *pServer = NULL;
@@ -68,10 +71,17 @@ Adafruit_HX711 hx711_2(DATA_PIN2, CLOCK_PIN2);
 void asyncLight(void * parameter) {
   while(true) {
     if (needLight) {
-        // Turn the LEDs OFF
-        digitalWrite(23, HIGH);
+        digitalWrite(23, LOW);
         digitalWrite(18, HIGH);
+        digitalWrite(10, LOW);
+    } else if (needFaster) {
+        digitalWrite(23, LOW);
+        digitalWrite(18, LOW);
         digitalWrite(10, HIGH);
+    } else if (needSlower) {
+        digitalWrite(23, HIGH);
+        digitalWrite(18, LOW);
+        digitalWrite(10, LOW);
     } else {
         // Turn the LEDs OFF
         digitalWrite(23, LOW);
@@ -79,6 +89,9 @@ void asyncLight(void * parameter) {
         digitalWrite(10, LOW);
     }
     needLight = false;
+    needSlower = false;
+    needFaster = false;
+
     delay(3000);
   }
 }
@@ -232,6 +245,10 @@ public:
 
             } else if (rxValue_command == "Light") {
                 needLight = true;
+            } else if (rxValue_command == "Faster") {
+                needFaster = true;
+            } else if (rxValue_command == "Slower") {
+                needSlower = true;
             } else {
                 Serial.print("Unknown command received: ");
                 Serial.println(rxValue.c_str());
