@@ -43,6 +43,10 @@ int32_t weightB32_1;
 int32_t weightA128_2;
 int32_t weightB32_2;
 
+// Lighting operation
+bool needLight = false;
+
+// BLE
 BLEServer *pServer = NULL;
 BLECharacteristic *pTxCharacteristic;
 bool deviceConnected = false;
@@ -50,6 +54,24 @@ bool oldDeviceConnected = false;
 
 Adafruit_HX711 hx711_1(DATA_PIN1, CLOCK_PIN1);
 Adafruit_HX711 hx711_2(DATA_PIN2, CLOCK_PIN2);
+
+void asyncLight(void * parameter) {
+  while(true) {
+    if (needLight) {
+        // Turn the LEDs OFF
+        digitalWrite(23, HIGH);
+        digitalWrite(18, HIGH);
+        digitalWrite(10, HIGH);
+    } else {
+        // Turn the LEDs OFF
+        digitalWrite(23, LOW);
+        digitalWrite(18, LOW);
+        digitalWrite(10, LOW);
+    }
+    needLight = false;
+    delay(3000);
+  }
+}
 
 // Function that you want to run asynchronously
 void asyncFunction(void * parameter) {
@@ -198,6 +220,8 @@ public:
                 // Assign tare operation variables
                 weightOperation = NEED_TARING;
 
+            } else if (rxValue_command == "Light") {
+                needLight = true;
             } else {
                 Serial.print("Unknown command received: ");
                 Serial.println(rxValue.c_str());
@@ -208,12 +232,21 @@ public:
 
 void setup() {
   Serial.begin(115200);
+  /*  FSR  */
   pinMode(36, INPUT);
   pinMode(37, INPUT);
   pinMode(38, INPUT);
   pinMode(39, INPUT);
   pinMode(34, INPUT);
   pinMode(35, INPUT);
+  /*  LED  */
+  pinMode(23, OUTPUT);
+  pinMode(18, OUTPUT);
+  pinMode(10, OUTPUT);
+  // Turn the LEDs OFF
+  digitalWrite(23, LOW);
+  digitalWrite(18, LOW);
+  digitalWrite(10, LOW);
 
   // Create the BLE Device
   BLEDevice::init("esp32");  // Set the device name to "esp32"
@@ -263,6 +296,16 @@ void setup() {
         1,              // Task priority
         NULL            // Task handle
     );
+            // Create another FreeRTOS task
+    xTaskCreate(
+        asyncLight,  // Function to be executed
+        "Async Light Task",   // Name of the task
+        10000,          // Stack size (in words)
+        NULL,           // Parameter to pass
+        2,              // Task priority
+        NULL            // Task handle
+    );
+
 
   // Initialize the HX711
   Serial.print("Initialising HX711_1 on pins ");
