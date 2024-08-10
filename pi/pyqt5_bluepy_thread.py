@@ -3,7 +3,7 @@ import re
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot, QProcess
 from PyQt5.QtGui import QColor, QBrush
 from PyQt5.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView
+    QApplication, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QWidget, QSlider, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy
 )
 from bluepy import btle
 import time
@@ -161,6 +161,13 @@ class MainWindow(QMainWindow):
         self.connectingLabel.setAlignment(Qt.AlignCenter)
         self.connectingLabel.setVisible(False)
 
+        # Group Box for Battery Percentage Display
+        batteryGroupBox = QGroupBox("Battery")
+        self.batteryLabel = QLabel("Battery: N/A")
+        batteryLayout = QVBoxLayout()
+        batteryLayout.addWidget(self.batteryLabel)
+        batteryGroupBox.setLayout(batteryLayout)
+
         # Group Box for Weight Display
         weightGroupBox = QGroupBox("Weight")
         self.weightLabel = QLabel("Weight: N/A")
@@ -177,7 +184,9 @@ class MainWindow(QMainWindow):
         self.analogTable.horizontalHeader().setVisible(False)
         self.analogTable.verticalHeader().setVisible(False)
         self.analogTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.analogTable.verticalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.analogTable.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        #self.analogTable.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        
         analogLayout = QVBoxLayout()
         analogLayout.addWidget(self.timestampLabel)
         analogLayout.addWidget(self.analogTable)
@@ -271,6 +280,7 @@ class MainWindow(QMainWindow):
         # Adding widgets to the main layout
         mainLayout.addWidget(self.buttonResetApp)  # Add Reset Button to the top
         mainLayout.addWidget(self.buttonStartBLE)
+        mainLayout.addWidget(batteryGroupBox)      # Add the Battery group box
         mainLayout.addWidget(bpmGroupBox)          # Add the BPM Controls group box
         mainLayout.addWidget(cadenceGroupBox)      # Add the Cadence group box near BPM controls
         mainLayout.addWidget(self.connectingLabel) # Add connecting text label to the layout
@@ -374,6 +384,7 @@ class MainWindow(QMainWindow):
     def slotRes(self, res):
         self.console.appendPlainText(res)
         self.updateWeightDisplay(res)
+        self.updateBatteryDisplay(res)
 
     def updateWeightDisplay(self, message):
         # Extract weight from the message
@@ -382,6 +393,13 @@ class MainWindow(QMainWindow):
             weight = match.group(1)
             unit = self.unitToggle.currentText()  # Get current unit from the combo box
             self.weightLabel.setText(f"Weight: {weight} {unit}")
+
+    def updateBatteryDisplay(self, message):
+        # Extract battery percentage from the message
+        match = re.search(r'B:(\d+)', message)
+        if match:
+            battery = match.group(1)
+            self.batteryLabel.setText(f"Battery: {battery}%")
 
     def updateAnalogValues(self, data):
         # Update the timestamp label
@@ -459,5 +477,4 @@ class MainWindow(QMainWindow):
 app = QApplication(sys.argv)
 window = MainWindow()
 app.exec()
-
 
