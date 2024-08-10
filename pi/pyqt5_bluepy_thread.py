@@ -153,9 +153,6 @@ class MainWindow(QMainWindow):
         self.buttonStartBLE = QPushButton("Start BLE")
         self.buttonStartBLE.pressed.connect(self.startBLE)
 
-        self.console = QPlainTextEdit()
-        self.console.setReadOnly(True)
-
         # Connecting text label setup
         self.connectingLabel = QLabel("Trying to connect to Bluetooth...", self)
         self.connectingLabel.setAlignment(Qt.AlignCenter)
@@ -185,7 +182,7 @@ class MainWindow(QMainWindow):
         self.analogTable.verticalHeader().setVisible(False)
         self.analogTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.analogTable.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        #self.analogTable.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+#        self.analogTable.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         
         analogLayout = QVBoxLayout()
         analogLayout.addWidget(self.timestampLabel)
@@ -286,7 +283,6 @@ class MainWindow(QMainWindow):
         mainLayout.addWidget(self.connectingLabel) # Add connecting text label to the layout
         mainLayout.addWidget(weightGroupBox)       # Add the weight group box here
         mainLayout.addWidget(analogGroupBox)       # Add the analog values table group box
-        mainLayout.addWidget(self.console)         # Add console below the weight group box
         mainLayout.addWidget(tareGroupBox)
         mainLayout.addWidget(calGroupBox)
         mainLayout.addWidget(fsrGroupBox)          # Add the Calibrate FSR group box
@@ -382,7 +378,6 @@ class MainWindow(QMainWindow):
         print(msg)
 
     def slotRes(self, res):
-        self.console.appendPlainText(res)
         self.updateWeightDisplay(res)
         self.updateBatteryDisplay(res)
 
